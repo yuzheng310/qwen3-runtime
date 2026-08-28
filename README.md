@@ -57,6 +57,12 @@ agent trajectories.
 The systems objective is therefore different: optimize the cost of producing a
 complete rollout, not only the latency of one completion.
 
+**Small by design.** Core execution and state management fit in roughly
+**3,000 lines of Python** (excluding tests, benchmarks, protocol adapters, and
+replaceable kernels). The scheduler, paged KV, model execution, sampling, and
+session lifecycle keep explicit boundaries, making the system practical to
+read end to end, test in isolation, and modify without pulling apart the stack.
+
 <table>
   <tr>
     <th align="center">Serving foundation</th>

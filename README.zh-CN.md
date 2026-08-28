@@ -54,6 +54,10 @@ decoding。
 因此，系统优化目标也不同：关注完整 rollout 的生成成本，而不只是一次 completion
 的延迟。
 
+**小而清晰。** 核心执行与状态管理代码只有约 **3,000 行 Python**（不含测试、
+benchmark、协议适配器与可替换 kernel）。Scheduler、Paged KV、模型执行、Sampling
+和 Session lifecycle 各自保持清晰边界，既便于从头读懂，也便于独立测试和替换。
+
 <table>
   <tr>
     <th align="center">Serving 底座</th>
