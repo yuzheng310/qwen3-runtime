@@ -1,0 +1,232 @@
+{
+  "schema_version": "code-localization-prefix-analysis-v1",
+  "method": "LCP on reconstructed token IDs from frozen CodeScout-4B tokenizer + HF apply_chat_template. Not min(len)/len.",
+  "tokenizer_files_sha256": {
+    "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "SHA256SUMS": "37a3966a1d7d77346f80525cf0d54f0b017bcec2ebbfa960689c022d0472237e"
+  },
+  "rollouts_sha256": "14130218f8789f6214ade31182a5b8f4372b528f2e8112e601afeaf23428aa2f",
+  "subset_sha256": "49f71ffffd58c6eeaeb111bad9a1591341d32fecd5d548d91721ca5c62d92c17",
+  "full_trace_v1": {
+    "n_sessions": 494,
+    "n_requests": 2395,
+    "n_adjacent_pairs": 1901,
+    "exact_lcp_prompt_tokens": {
+      "n": 1901,
+      "mean": 10514.55654918464,
+      "p50": 7407,
+      "p90": 21285,
+      "p95": 26335,
+      "max": 57748
+    },
+    "exact_lcp_prompt_ratio": {
+      "n": 1901,
+      "mean": 0.7391042061099996,
+      "p50": 0.813239159001314,
+      "p90": 0.9892951956838228,
+      "p95": 0.9928877035061399,
+      "max": 0.9974157194209657,
+      "min": 0.12882827975011427,
+      "frac_ge_50": 0.7948448185165702,
+      "frac_ge_75": 0.5828511309836928,
+      "frac_ge_90": 0.3114150447133088,
+      "frac_ge_95": 0.25881115202524985,
+      "frac_ge_99": 0.09363492898474488
+    },
+    "exact_lcp_session_tokens": {
+      "n": 1901,
+      "mean": 10619.016307206733,
+      "p50": 7473,
+      "p90": 21324,
+      "p95": 26384,
+      "max": 57799
+    },
+    "exact_lcp_session_ratio": {
+      "n": 1901,
+      "mean": 0.7517290690364097,
+      "p50": 0.829517091698318,
+      "p90": 0.9926121782409207,
+      "p95": 0.9953871879144324,
+      "max": 0.998426114835325,
+      "min": 0.13454213012341917
+    },
+    "prompt_t_is_prefix_of_next": 1.0,
+    "session_is_prefix_of_next": 1.0,
+    "session_nl_is_prefix_of_next": 1.0,
+    "kind_counts": {
+      "exact_append_session": 1901
+    },
+    "kind_fractions": {
+      "exact_append_session": 1.0
+    },
+    "new_suffix_tokens": {
+      "n": 1901,
+      "mean": 3443.4939505523407,
+      "p50": 1633,
+      "p90": 9144,
+      "p95": 11214,
+      "max": 22720
+    },
+    "reusable_prefix_tokens": {
+      "n": 1901,
+      "mean": 10619.016307206733,
+      "p50": 7473,
+      "p90": 21324,
+      "p95": 26384,
+      "max": 57799
+    },
+    "reusable_ratio": {
+      "n": 1901,
+      "mean": 0.7517290690364097,
+      "p50": 0.829517091698318,
+      "p90": 0.9926121782409207,
+      "p95": 0.9953871879144324,
+      "max": 0.998426114835325
+    },
+    "suffix_ratio": {
+      "n": 1901,
+      "mean": 0.24827093096359035,
+      "p50": 0.17048290830168203,
+      "p90": 0.6350315789473684,
+      "p95": 0.6913781398506449,
+      "max": 0.8654578698765808
+    },
+    "token_budget": {
+      "sum_prompt_tokens_all_turns": 28608261,
+      "sum_first_turn_prompt_tokens": 1875429,
+      "sum_later_prompt_tokens": 26732832,
+      "sum_exact_lcp_prompt_tokens": 19988172,
+      "sum_exact_lcp_session_tokens": 20186750,
+      "sum_reusable_prefix_tokens_strongest": 20186750,
+      "sum_new_suffix_tokens_strongest": 6546082,
+      "exact_lcp_prompt_fraction_of_later_prompts": 0.747701253649445,
+      "exact_lcp_session_fraction_of_later_prompts": 0.7551294976903308,
+      "reusable_fraction_of_later_prompts": 0.7551294976903308,
+      "reusable_fraction_of_all_prompts": 0.7056266020503658,
+      "note": "Length-based Stage-2 estimate used min(prev_len, next_len)/next_len. exact_lcp_prompt is token-identical prefix of prompt_t vs prompt_t+1. session continuation is LCP(prompt_t+completion_t, prompt_t+1). strongest reusable uses exact session prefix, else newline repair, else prompt prefix, else raw LCP."
+    },
+    "causes_if_session_not_exact": {
+      "append_after_im_end_newline": 0,
+      "prompt_prefix_completion_mismatch": 0,
+      "internal_prefix_mutation": 0,
+      "left_truncation": 0,
+      "total_prefix_mismatch": 0,
+      "unexplained": 0
+    },
+    "example_non_session": []
+  },
+  "replay_subset_v1": {
+    "n_sessions": 100,
+    "n_requests": 471,
+    "n_adjacent_pairs": 371,
+    "exact_lcp_prompt_tokens": {
+      "n": 371,
+      "mean": 10622.55525606469,
+      "p50": 7891,
+      "p90": 21483,
+      "p95": 26449,
+      "max": 38340
+    },
+    "exact_lcp_prompt_ratio": {
+      "n": 371,
+      "mean": 0.7307926212448349,
+      "p50": 0.7954945441745864,
+      "p90": 0.9861794647070721,
+      "p95": 0.9926130156583259,
+      "max": 0.9962947249328242,
+      "min": 0.2294549128124039,
+      "frac_ge_50": 0.7789757412398922,
+      "frac_ge_75": 0.555256064690027,
+      "frac_ge_90": 0.32345013477088946,
+      "frac_ge_95": 0.2641509433962264,
+      "frac_ge_99": 0.07277628032345014
+    },
+    "exact_lcp_session_tokens": {
+      "n": 371,
+      "mean": 10727.757412398922,
+      "p50": 7986,
+      "p90": 21534,
+      "p95": 26488,
+      "max": 38390
+    },
+    "exact_lcp_session_ratio": {
+      "n": 371,
+      "mean": 0.7428681008133027,
+      "p50": 0.8161363636363637,
+      "p90": 0.989567031820553,
+      "p95": 0.9947978983509338,
+      "max": 0.9977404513652574,
+      "min": 0.23547239425484254
+    },
+    "prompt_t_is_prefix_of_next": 1.0,
+    "session_is_prefix_of_next": 1.0,
+    "session_nl_is_prefix_of_next": 1.0,
+    "kind_counts": {
+      "exact_append_session": 371
+    },
+    "kind_fractions": {
+      "exact_append_session": 1.0
+    },
+    "new_suffix_tokens": {
+      "n": 371,
+      "mean": 3514.8814016172505,
+      "p50": 1882,
+      "p90": 8725,
+      "p95": 11211,
+      "max": 18312
+    },
+    "reusable_prefix_tokens": {
+      "n": 371,
+      "mean": 10727.757412398922,
+      "p50": 7986,
+      "p90": 21534,
+      "p95": 26488,
+      "max": 38390
+    },
+    "reusable_ratio": {
+      "n": 371,
+      "mean": 0.7428681008133027,
+      "p50": 0.8161363636363637,
+      "p90": 0.989567031820553,
+      "p95": 0.9947978983509338,
+      "max": 0.9977404513652574
+    },
+    "suffix_ratio": {
+      "n": 371,
+      "mean": 0.2571318991866973,
+      "p50": 0.18386363636363637,
+      "p90": 0.6354940769626959,
+      "p95": 0.6917762049207954,
+      "max": 0.7645276057451574
+    },
+    "token_budget": {
+      "sum_prompt_tokens_all_turns": 5660337,
+      "sum_first_turn_prompt_tokens": 376318,
+      "sum_later_prompt_tokens": 5284019,
+      "sum_exact_lcp_prompt_tokens": 3940968,
+      "sum_exact_lcp_session_tokens": 3979998,
+      "sum_reusable_prefix_tokens_strongest": 3979998,
+      "sum_new_suffix_tokens_strongest": 1304021,
+      "exact_lcp_prompt_fraction_of_later_prompts": 0.7458277496731182,
+      "exact_lcp_session_fraction_of_later_prompts": 0.7532141727726566,
+      "reusable_fraction_of_later_prompts": 0.7532141727726566,
+      "reusable_fraction_of_all_prompts": 0.7031379933738927,
+      "note": "Length-based Stage-2 estimate used min(prev_len, next_len)/next_len. exact_lcp_prompt is token-identical prefix of prompt_t vs prompt_t+1. session continuation is LCP(prompt_t+completion_t, prompt_t+1). strongest reusable uses exact session prefix, else newline repair, else prompt prefix, else raw LCP."
+    },
+    "causes_if_session_not_exact": {
+      "append_after_im_end_newline": 0,
+      "prompt_prefix_completion_mismatch": 0,
+      "internal_prefix_mutation": 0,
+      "left_truncation": 0,
+      "total_prefix_mismatch": 0,
+      "unexplained": 0
+    },
+    "example_non_session": []
+  },
+  "length_based_stage2_estimate": {
+    "source": "workloads/code_localization/summary_v1.json",
+    "adjacent_shared_prefix_ratio_p50": 0.8126860223507609,
+    "repeated_prefix_fraction_of_all_prompts": 0.6984619883374915,
+    "status": "approximate_length_stability_lower_bound"
+  }
+}

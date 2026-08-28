@@ -1,0 +1,30 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Weights only (repo-root). Do not ignore qwen3_runtime/models source.
+/models/
+*.safetensors
+*.bin
+
+# GPU / profiler blobs (keep JSON analyses in git)
+*.nsys-rep
+*.sqlite
+*.qdrep
+
+# Stage-2 raw HF parquet and large tokenizer blobs (keep hashes + compact JSON in git)
+workloads/code_localization/raw/
+workloads/code_localization/tokenizer/tokenizer.json
+workloads/code_localization/tokenizer/vocab.json
+workloads/code_localization/tokenizer/merges.txt
+workloads/code_localization/token_ids/
+
+# OS
+.DS_Store

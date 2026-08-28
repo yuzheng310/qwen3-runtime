@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "engine": "qwen3-runtime",
+  "case": "decode",
+  "seed": 20260825,
+  "workload": {
+    "name": "decode",
+    "scale": "full",
+    "supplementary": false,
+    "model": "Qwen/Qwen3-4B",
+    "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+    "concurrency": 1,
+    "n_requests": 1,
+    "prompt_tokens": 256,
+    "output_tokens": 512,
+    "poisson_rate": null
+  },
+  "engine_config": {
+    "split": true,
+    "block_size": 16,
+    "num_kv_blocks": 12054,
+    "attention_backend": "flashinfer",
+    "cuda_graph": true,
+    "max_num_batched_tokens": 2048
+  },
+  "environment": {
+    "git_commit": "d1c479da758361d9232534030e12c6d0c5f70724",
+    "dirty": false,
+    "timestamp_utc": "2026-08-25T19:00:24.523579+00:00",
+    "command": [
+      "python",
+      "-m",
+      "bench.run_bench",
+      "--case",
+      "decode",
+      "--scale",
+      "full",
+      "--engine",
+      "qwen3-runtime"
+    ],
+    "python": "3.12.3",
+    "torch": "2.8.0+cu128",
+    "cuda": "12.8",
+    "gpu_name": "NVIDIA GeForce RTX 4090",
+    "gpu_memory_total_bytes": 50866487296,
+    "nvidia_driver": "595.58.03",
+    "triton": "3.4.0",
+    "vllm": null,
+    "transformers": "5.15.1",
+    "flash_attn": null,
+    "flashinfer": "0.6.17",
+    "dtype": "bf16"
+  },
+  "forced_length_ok": true,
+  "warmup": 1,
+  "metrics": {
+    "forced_length_ok": true,
+    "ttft_s": {
+      "median": 0.019929643720388412,
+      "mean": 0.01992459533115228,
+      "stdev": 9.282566458233877e-05,
+      "min": 0.019808467477560043,
+      "max": 0.020035674795508385,
+      "spread_flag": false
+    },
+    "tpot_s": {
+      "median": 0.009940755945391618,
+      "mean": 0.009940600424849436,
+      "stdev": 1.6848552727122593e-06,
+      "min": 0.00993846354681685,
+      "max": 0.009942581782339838,
+      "spread_flag": false
+    },
+    "output_tok_s": {
+      "median": 100.39832811988911,
+      "mean": 100.39991905716667,
+      "stdev": 0.018703582466461553,
+      "min": 100.37784888160823,
+      "max": 100.42358017000267,
+      "spread_flag": false
+    },
+    "request_per_s": {
+      "median": 0.19609048460915843,
+      "mean": 0.19609359190852865,
+      "stdev": 3.653043450480772e-05,
+      "min": 0.19605048609689107,
+      "max": 0.19613980501953646,
+      "spread_flag": false
+    },
+    "itl_s_p50": {
+      "median": 0.00995115377008915,
+      "mean": 0.009950946395595869,
+      "stdev": 4.489382700956405e-07,
+      "min": 0.009950323030352592,
+      "max": 0.009951362386345863,
+      "spread_flag": false
+    },
+    "itl_s_p99": {
+      "median": 0.010320071317255496,
+      "mean": 0.010320849530398845,
+      "stdev": 3.669166276914734e-06,
+      "min": 0.01031679566949606,
+      "max": 0.01032568160444498,
+      "spread_flag": false
+    },
+    "trials": [
+      {
+        "n_requests": 1,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": 0.019808467477560043,
+          "mean": 0.019808467477560043,
+          "stdev": 0.0,
+          "min": 0.019808467477560043,
+          "max": 0.019808467477560043,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": 0.00993846354681685,
+          "mean": 0.00993846354681685,
+          "stdev": 0.0,
+          "min": 0.00993846354681685,
+          "max": 0.00993846354681685,
+          "spread_flag": false
+        },
+        "itl_s_p50": 0.009951362386345863,
+        "itl_s_p99": 0.01031679566949606,
+        "output_tok_s": 100.42358017000267,
+        "request_per_s": 0.19613980501953646,
+        "wall_s": 5.098404170945287,
+        "output_lens": [
+          512
+        ]
+      },
+      {
+        "n_requests": 1,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": 0.019929643720388412,
+          "mean": 0.019929643720388412,
+          "stdev": 0.0,
+          "min": 0.019929643720388412,
+          "max": 0.019929643720388412,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": 0.009940755945391618,
+          "mean": 0.009940755945391618,
+          "stdev": 0.0,
+          "min": 0.009940755945391618,
+          "max": 0.009940755945391618,
+          "spread_flag": false
+        },
+        "itl_s_p50": 0.00995115377008915,
+        "itl_s_p99": 0.010320071317255496,
+        "output_tok_s": 100.39832811988911,
+        "request_per_s": 0.19609048460915843,
+        "wall_s": 5.09968651458621,
+        "output_lens": [
+          512
+        ]
+      },
+      {
+        "n_requests": 1,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": 0.020035674795508385,
+          "mean": 0.020035674795508385,
+          "stdev": 0.0,
+          "min": 0.020035674795508385,
+          "max": 0.020035674795508385,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": 0.009942581782339838,
+          "mean": 0.009942581782339838,
+          "stdev": 0.0,
+          "min": 0.009942581782339838,
+          "max": 0.009942581782339838,
+          "spread_flag": false
+        },
+        "itl_s_p50": 0.009950323030352592,
+        "itl_s_p99": 0.01032568160444498,
+        "output_tok_s": 100.37784888160823,
+        "request_per_s": 0.19605048609689107,
+        "wall_s": 5.100726960226893,
+        "output_lens": [
+          512
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,810 @@
+{
+  "name": "code-localization-replay-subset-v1",
+  "parent": "code-localization-trace-v1",
+  "selection": "stratified_by_peak_context_every_kth",
+  "n_tasks": 100,
+  "task_ids": [
+    "django__django-14534",
+    "pytest-dev__pytest-6202",
+    "django__django-13410",
+    "sphinx-doc__sphinx-7440",
+    "django__django-11451",
+    "django__django-12741",
+    "scikit-learn__scikit-learn-14141",
+    "django__django-16333",
+    "django__django-16612",
+    "django__django-14500",
+    "scikit-learn__scikit-learn-25747",
+    "django__django-14089",
+    "django__django-11532",
+    "django__django-11206",
+    "sphinx-doc__sphinx-10323",
+    "django__django-15503",
+    "django__django-16255",
+    "django__django-11749",
+    "django__django-13837",
+    "psf__requests-2317",
+    "django__django-11400",
+    "django__django-11133",
+    "django__django-14672",
+    "sympy__sympy-13974",
+    "pytest-dev__pytest-7432",
+    "django__django-12308",
+    "sphinx-doc__sphinx-8638",
+    "sphinx-doc__sphinx-7985",
+    "pytest-dev__pytest-7521",
+    "django__django-12304",
+    "django__django-14771",
+    "django__django-12193",
+    "django__django-11815",
+    "psf__requests-5414",
+    "sphinx-doc__sphinx-9711",
+    "django__django-14725",
+    "pytest-dev__pytest-5787",
+    "pytest-dev__pytest-10051",
+    "django__django-11333",
+    "django__django-15863",
+    "django__django-15380",
+    "astropy__astropy-14096",
+    "django__django-15104",
+    "scikit-learn__scikit-learn-9288",
+    "sphinx-doc__sphinx-8548",
+    "sympy__sympy-13757",
+    "astropy__astropy-7166",
+    "scikit-learn__scikit-learn-12973",
+    "sympy__sympy-16766",
+    "django__django-13512",
+    "django__django-16595",
+    "django__django-11820",
+    "django__django-15916",
+    "psf__requests-1724",
+    "sphinx-doc__sphinx-8593",
+    "matplotlib__matplotlib-20859",
+    "sympy__sympy-23950",
+    "astropy__astropy-8707",
+    "django__django-13794",
+    "django__django-13568",
+    "astropy__astropy-14598",
+    "sphinx-doc__sphinx-7748",
+    "sympy__sympy-21379",
+    "django__django-11490",
+    "sympy__sympy-18189",
+    "pytest-dev__pytest-10356",
+    "django__django-16819",
+    "pydata__xarray-4695",
+    "sympy__sympy-12489",
+    "django__django-11603",
+    "django__django-15741",
+    "scikit-learn__scikit-learn-13142",
+    "django__django-13346",
+    "django__django-15382",
+    "pydata__xarray-4094",
+    "sympy__sympy-20590",
+    "scikit-learn__scikit-learn-11578",
+    "sympy__sympy-13480",
+    "matplotlib__matplotlib-25960",
+    "sympy__sympy-23413",
+    "sympy__sympy-21847",
+    "astropy__astropy-14508",
+    "sphinx-doc__sphinx-8035",
+    "pydata__xarray-7229",
+    "django__django-13315",
+    "django__django-12663",
+    "matplotlib__matplotlib-26342",
+    "django__django-15277",
+    "django__django-14559",
+    "django__django-12858",
+    "pydata__xarray-2905",
+    "matplotlib__matplotlib-13989",
+    "django__django-16032",
+    "sympy__sympy-13372",
+    "sphinx-doc__sphinx-9258",
+    "django__django-13406",
+    "sympy__sympy-20428",
+    "sphinx-doc__sphinx-7590",
+    "sympy__sympy-14248",
+    "django__django-15732"
+  ],
+  "tasks": [
+    {
+      "task_id": "astropy__astropy-14096",
+      "repo_id": "astropy/astropy",
+      "base_commit": "1a4462d72eb03f30dc83a879b1dd57aac8b2c18b",
+      "turns": 5,
+      "peak_context_tokens": 14354
+    },
+    {
+      "task_id": "astropy__astropy-14508",
+      "repo_id": "astropy/astropy",
+      "base_commit": "a3f4ae6cd24d5ecdf49f213d77b3513dd509a06c",
+      "turns": 4,
+      "peak_context_tokens": 23722
+    },
+    {
+      "task_id": "astropy__astropy-14598",
+      "repo_id": "astropy/astropy",
+      "base_commit": "80c3854a5f4f4a6ab86c03d9db7854767fcd83c1",
+      "turns": 5,
+      "peak_context_tokens": 18010
+    },
+    {
+      "task_id": "astropy__astropy-7166",
+      "repo_id": "astropy/astropy",
+      "base_commit": "26d147868f8a891a6009a25cd6a8576d2e1bd747",
+      "turns": 5,
+      "peak_context_tokens": 15419
+    },
+    {
+      "task_id": "astropy__astropy-8707",
+      "repo_id": "astropy/astropy",
+      "base_commit": "a85a0747c54bac75e9c3b2fe436b105ea029d6cf",
+      "turns": 6,
+      "peak_context_tokens": 17465
+    },
+    {
+      "task_id": "django__django-11133",
+      "repo_id": "django/django",
+      "base_commit": "879cc3da6249e920b8d54518a0ae06de835d7373",
+      "turns": 4,
+      "peak_context_tokens": 10856
+    },
+    {
+      "task_id": "django__django-11206",
+      "repo_id": "django/django",
+      "base_commit": "571ab44e8a8936014c22e7eebe4948d9611fd7ce",
+      "turns": 4,
+      "peak_context_tokens": 9104
+    },
+    {
+      "task_id": "django__django-11333",
+      "repo_id": "django/django",
+      "base_commit": "55b68de643b5c2d5f0a8ea7587ab3b2966021ccc",
+      "turns": 4,
+      "peak_context_tokens": 13725
+    },
+    {
+      "task_id": "django__django-11400",
+      "repo_id": "django/django",
+      "base_commit": "1f8382d34d54061eddc41df6994e20ee38c60907",
+      "turns": 4,
+      "peak_context_tokens": 10498
+    },
+    {
+      "task_id": "django__django-11451",
+      "repo_id": "django/django",
+      "base_commit": "e065b293878b1e3ea56655aa9d33e87576cd77ff",
+      "turns": 4,
+      "peak_context_tokens": 6394
+    },
+    {
+      "task_id": "django__django-11490",
+      "repo_id": "django/django",
+      "base_commit": "a7038adbd02c916315b16939b835f021c2ee8880",
+      "turns": 4,
+      "peak_context_tokens": 18550
+    },
+    {
+      "task_id": "django__django-11532",
+      "repo_id": "django/django",
+      "base_commit": "a5308514fb4bc5086c9a16a8a24a945eeebb073c",
+      "turns": 4,
+      "peak_context_tokens": 8950
+    },
+    {
+      "task_id": "django__django-11603",
+      "repo_id": "django/django",
+      "base_commit": "f618e033acd37d59b536d6e6126e6c5be18037f6",
+      "turns": 5,
+      "peak_context_tokens": 19995
+    },
+    {
+      "task_id": "django__django-11749",
+      "repo_id": "django/django",
+      "base_commit": "350123f38c2b6217c38d70bfbd924a9ba3df1289",
+      "turns": 4,
+      "peak_context_tokens": 9815
+    },
+    {
+      "task_id": "django__django-11815",
+      "repo_id": "django/django",
+      "base_commit": "e02f67ef2d03d48128e7a118bf75f0418e24e8ac",
+      "turns": 4,
+      "peak_context_tokens": 12913
+    },
+    {
+      "task_id": "django__django-11820",
+      "repo_id": "django/django",
+      "base_commit": "c2678e49759e5c4c329bff0eeca2886267005d21",
+      "turns": 3,
+      "peak_context_tokens": 16174
+    },
+    {
+      "task_id": "django__django-12193",
+      "repo_id": "django/django",
+      "base_commit": "3fb7c12158a2402f0f80824f6778112071235803",
+      "turns": 4,
+      "peak_context_tokens": 12800
+    },
+    {
+      "task_id": "django__django-12304",
+      "repo_id": "django/django",
+      "base_commit": "4c1b401e8250f9f520b3c7dc369554477ce8b15a",
+      "turns": 3,
+      "peak_context_tokens": 12501
+    },
+    {
+      "task_id": "django__django-12308",
+      "repo_id": "django/django",
+      "base_commit": "2e0f04507b17362239ba49830d26fec504d46978",
+      "turns": 4,
+      "peak_context_tokens": 11862
+    },
+    {
+      "task_id": "django__django-12663",
+      "repo_id": "django/django",
+      "base_commit": "fa5e7e46d875d4143510944f19d79df7b1739bab",
+      "turns": 6,
+      "peak_context_tokens": 25348
+    },
+    {
+      "task_id": "django__django-12741",
+      "repo_id": "django/django",
+      "base_commit": "537d422942b53bc0a2b6a51968f379c0de07793c",
+      "turns": 4,
+      "peak_context_tokens": 6860
+    },
+    {
+      "task_id": "django__django-12858",
+      "repo_id": "django/django",
+      "base_commit": "f2051eb8a7febdaaa43bd33bf5a6108c5f428e59",
+      "turns": 5,
+      "peak_context_tokens": 27102
+    },
+    {
+      "task_id": "django__django-13315",
+      "repo_id": "django/django",
+      "base_commit": "36bc47069ce071e80c8129500de3b8664d2058a7",
+      "turns": 5,
+      "peak_context_tokens": 24505
+    },
+    {
+      "task_id": "django__django-13346",
+      "repo_id": "django/django",
+      "base_commit": "9c92924cd5d164701e2514e1c2d6574126bd7cc2",
+      "turns": 5,
+      "peak_context_tokens": 20697
+    },
+    {
+      "task_id": "django__django-13406",
+      "repo_id": "django/django",
+      "base_commit": "84609b3205905097d7d3038d32e6101f012c0619",
+      "turns": 7,
+      "peak_context_tokens": 32913
+    },
+    {
+      "task_id": "django__django-13410",
+      "repo_id": "django/django",
+      "base_commit": "580a4341cb0b4cbfc215a70afc004875a7e815f4",
+      "turns": 4,
+      "peak_context_tokens": 5571
+    },
+    {
+      "task_id": "django__django-13512",
+      "repo_id": "django/django",
+      "base_commit": "b79088306513d5ed76d31ac40ab3c15f858946ea",
+      "turns": 4,
+      "peak_context_tokens": 15762
+    },
+    {
+      "task_id": "django__django-13568",
+      "repo_id": "django/django",
+      "base_commit": "ede9fac75807fe5810df66280a60e7068cc97e4a",
+      "turns": 6,
+      "peak_context_tokens": 17747
+    },
+    {
+      "task_id": "django__django-13794",
+      "repo_id": "django/django",
+      "base_commit": "fe886eee36be8022f34cfe59aa61ff1c21fe01d9",
+      "turns": 4,
+      "peak_context_tokens": 17685
+    },
+    {
+      "task_id": "django__django-13837",
+      "repo_id": "django/django",
+      "base_commit": "415f50298f97fb17f841a9df38d995ccf347dfcc",
+      "turns": 6,
+      "peak_context_tokens": 10027
+    },
+    {
+      "task_id": "django__django-14089",
+      "repo_id": "django/django",
+      "base_commit": "d01709aae21de9cd2565b9c52f32732ea28a2d98",
+      "turns": 4,
+      "peak_context_tokens": 8815
+    },
+    {
+      "task_id": "django__django-14500",
+      "repo_id": "django/django",
+      "base_commit": "8c3bd0b708b488a1f6e8bd8cc6b96569904605be",
+      "turns": 4,
+      "peak_context_tokens": 8040
+    },
+    {
+      "task_id": "django__django-14534",
+      "repo_id": "django/django",
+      "base_commit": "910ecd1b8df7678f45c3d507dde6bcb1faafa243",
+      "turns": 1,
+      "peak_context_tokens": 3827
+    },
+    {
+      "task_id": "django__django-14559",
+      "repo_id": "django/django",
+      "base_commit": "d79be3ed39b76d3e34431873eec16f6dd354ab17",
+      "turns": 5,
+      "peak_context_tokens": 26731
+    },
+    {
+      "task_id": "django__django-14672",
+      "repo_id": "django/django",
+      "base_commit": "00ea883ef56fb5e092cbe4a6f7ff2e7470886ac4",
+      "turns": 4,
+      "peak_context_tokens": 11119
+    },
+    {
+      "task_id": "django__django-14725",
+      "repo_id": "django/django",
+      "base_commit": "0af9a5fc7d765aa05ea784e2c3237675f3bb4b49",
+      "turns": 4,
+      "peak_context_tokens": 13380
+    },
+    {
+      "task_id": "django__django-14771",
+      "repo_id": "django/django",
+      "base_commit": "4884a87e022056eda10534c13d74e49b8cdda632",
+      "turns": 4,
+      "peak_context_tokens": 12737
+    },
+    {
+      "task_id": "django__django-15104",
+      "repo_id": "django/django",
+      "base_commit": "a7e7043c8746933dafce652507d3b821801cdc7d",
+      "turns": 10,
+      "peak_context_tokens": 14862
+    },
+    {
+      "task_id": "django__django-15277",
+      "repo_id": "django/django",
+      "base_commit": "30613d6a748fce18919ff8b0da166d9fda2ed9bc",
+      "turns": 5,
+      "peak_context_tokens": 25863
+    },
+    {
+      "task_id": "django__django-15380",
+      "repo_id": "django/django",
+      "base_commit": "71e7c8e73712419626f1c2b6ec036e8559a2d667",
+      "turns": 3,
+      "peak_context_tokens": 14156
+    },
+    {
+      "task_id": "django__django-15382",
+      "repo_id": "django/django",
+      "base_commit": "770d3e6a4ce8e0a91a9e27156036c1985e74d4a3",
+      "turns": 6,
+      "peak_context_tokens": 21188
+    },
+    {
+      "task_id": "django__django-15503",
+      "repo_id": "django/django",
+      "base_commit": "859a87d873ce7152af73ab851653b4e1c3ffea4c",
+      "turns": 4,
+      "peak_context_tokens": 9504
+    },
+    {
+      "task_id": "django__django-15732",
+      "repo_id": "django/django",
+      "base_commit": "ce69e34bd646558bb44ea92cecfd98b345a0b3e0",
+      "turns": 6,
+      "peak_context_tokens": 44498
+    },
+    {
+      "task_id": "django__django-15741",
+      "repo_id": "django/django",
+      "base_commit": "8c0886b068ba4e224dd78104b93c9638b860b398",
+      "turns": 4,
+      "peak_context_tokens": 20085
+    },
+    {
+      "task_id": "django__django-15863",
+      "repo_id": "django/django",
+      "base_commit": "37c5b8c07be104fd5288cd87f101e48cb7a40298",
+      "turns": 5,
+      "peak_context_tokens": 13988
+    },
+    {
+      "task_id": "django__django-15916",
+      "repo_id": "django/django",
+      "base_commit": "88e67a54b7ed0210c11523a337b498aadb2f5187",
+      "turns": 4,
+      "peak_context_tokens": 16404
+    },
+    {
+      "task_id": "django__django-16032",
+      "repo_id": "django/django",
+      "base_commit": "0c3981eb5094419fe200eb46c71b5376a2266166",
+      "turns": 5,
+      "peak_context_tokens": 28770
+    },
+    {
+      "task_id": "django__django-16255",
+      "repo_id": "django/django",
+      "base_commit": "444b6da7cc229a58a2c476a52e45233001dc7073",
+      "turns": 4,
+      "peak_context_tokens": 9729
+    },
+    {
+      "task_id": "django__django-16333",
+      "repo_id": "django/django",
+      "base_commit": "60a7bd89860e504c0c33b02c78edcac87f6d1b5a",
+      "turns": 5,
+      "peak_context_tokens": 7678
+    },
+    {
+      "task_id": "django__django-16595",
+      "repo_id": "django/django",
+      "base_commit": "f9fe062de5fc0896d6bbbf3f260b5c44473b3c77",
+      "turns": 6,
+      "peak_context_tokens": 15957
+    },
+    {
+      "task_id": "django__django-16612",
+      "repo_id": "django/django",
+      "base_commit": "55bcbd8d172b689811fae17cde2f09218dd74e9c",
+      "turns": 3,
+      "peak_context_tokens": 7761
+    },
+    {
+      "task_id": "django__django-16819",
+      "repo_id": "django/django",
+      "base_commit": "0b0998dc151feb77068e2387c34cc50ef6b356ae",
+      "turns": 7,
+      "peak_context_tokens": 19271
+    },
+    {
+      "task_id": "matplotlib__matplotlib-13989",
+      "repo_id": "matplotlib/matplotlib",
+      "base_commit": "a3e2897bfaf9eaac1d6649da535c4e721c89fa69",
+      "turns": 7,
+      "peak_context_tokens": 28224
+    },
+    {
+      "task_id": "matplotlib__matplotlib-20859",
+      "repo_id": "matplotlib/matplotlib",
+      "base_commit": "64619e53e9d0ed417daba287ac0d3a06943a54d5",
+      "turns": 5,
+      "peak_context_tokens": 16996
+    },
+    {
+      "task_id": "matplotlib__matplotlib-25960",
+      "repo_id": "matplotlib/matplotlib",
+      "base_commit": "1d0d255b79e84dfc9f2123c5eb85a842d342f72b",
+      "turns": 5,
+      "peak_context_tokens": 23264
+    },
+    {
+      "task_id": "matplotlib__matplotlib-26342",
+      "repo_id": "matplotlib/matplotlib",
+      "base_commit": "2aee6ccd7c7e1f8d282c1e7579f4ee546b838542",
+      "turns": 4,
+      "peak_context_tokens": 25650
+    },
+    {
+      "task_id": "psf__requests-1724",
+      "repo_id": "psf/requests",
+      "base_commit": "1ba83c47ce7b177efe90d5f51f7760680f72eda0",
+      "turns": 5,
+      "peak_context_tokens": 16694
+    },
+    {
+      "task_id": "psf__requests-2317",
+      "repo_id": "psf/requests",
+      "base_commit": "091991be0da19de9108dbe5e3752917fea3d7fdc",
+      "turns": 3,
+      "peak_context_tokens": 10242
+    },
+    {
+      "task_id": "psf__requests-5414",
+      "repo_id": "psf/requests",
+      "base_commit": "39d0fdd9096f7dceccbc8f82e1eda7dd64717a8e",
+      "turns": 4,
+      "peak_context_tokens": 13073
+    },
+    {
+      "task_id": "pydata__xarray-2905",
+      "repo_id": "pydata/xarray",
+      "base_commit": "7c4e2ac83f7b4306296ff9b7b51aaf016e5ad614",
+      "turns": 5,
+      "peak_context_tokens": 27649
+    },
+    {
+      "task_id": "pydata__xarray-4094",
+      "repo_id": "pydata/xarray",
+      "base_commit": "a64cf2d5476e7bbda099b34c40b7be1880dbd39a",
+      "turns": 6,
+      "peak_context_tokens": 21796
+    },
+    {
+      "task_id": "pydata__xarray-4695",
+      "repo_id": "pydata/xarray",
+      "base_commit": "51ef2a66c4e0896eab7d2b03e3dfb3963e338e3c",
+      "turns": 5,
+      "peak_context_tokens": 19444
+    },
+    {
+      "task_id": "pydata__xarray-7229",
+      "repo_id": "pydata/xarray",
+      "base_commit": "3aa75c8d00a4a2d4acf10d80f76b937cadb666b7",
+      "turns": 4,
+      "peak_context_tokens": 24203
+    },
+    {
+      "task_id": "pytest-dev__pytest-10051",
+      "repo_id": "pytest-dev/pytest",
+      "base_commit": "aa55975c7d3f6c9f6d7f68accc41bb7cadf0eb9a",
+      "turns": 4,
+      "peak_context_tokens": 13646
+    },
+    {
+      "task_id": "pytest-dev__pytest-10356",
+      "repo_id": "pytest-dev/pytest",
+      "base_commit": "3c1534944cbd34e8a41bc9e76818018fadefc9a1",
+      "turns": 7,
+      "peak_context_tokens": 19044
+    },
+    {
+      "task_id": "pytest-dev__pytest-5787",
+      "repo_id": "pytest-dev/pytest",
+      "base_commit": "955e54221008aba577ecbaefa15679f6777d3bf8",
+      "turns": 4,
+      "peak_context_tokens": 13520
+    },
+    {
+      "task_id": "pytest-dev__pytest-6202",
+      "repo_id": "pytest-dev/pytest",
+      "base_commit": "3a668ea6ff24b0c8f00498c3144c63bac561d925",
+      "turns": 4,
+      "peak_context_tokens": 5339
+    },
+    {
+      "task_id": "pytest-dev__pytest-7432",
+      "repo_id": "pytest-dev/pytest",
+      "base_commit": "e6e300e729dd33956e5448d8be9a0b1540b4e53a",
+      "turns": 3,
+      "peak_context_tokens": 11568
+    },
+    {
+      "task_id": "pytest-dev__pytest-7521",
+      "repo_id": "pytest-dev/pytest",
+      "base_commit": "41d211c24a6781843b174379d6d6538f5c17adb9",
+      "turns": 4,
+      "peak_context_tokens": 12392
+    },
+    {
+      "task_id": "scikit-learn__scikit-learn-11578",
+      "repo_id": "scikit-learn/scikit-learn",
+      "base_commit": "dd69361a0d9c6ccde0d2353b00b86e0e7541a3e3",
+      "turns": 6,
+      "peak_context_tokens": 22548
+    },
+    {
+      "task_id": "scikit-learn__scikit-learn-12973",
+      "repo_id": "scikit-learn/scikit-learn",
+      "base_commit": "a7b8b9e9e16d4e15fabda5ae615086c2e1c47d8a",
+      "turns": 4,
+      "peak_context_tokens": 15597
+    },
+    {
+      "task_id": "scikit-learn__scikit-learn-13142",
+      "repo_id": "scikit-learn/scikit-learn",
+      "base_commit": "1c8668b0a021832386470ddf740d834e02c66f69",
+      "turns": 5,
+      "peak_context_tokens": 20292
+    },
+    {
+      "task_id": "scikit-learn__scikit-learn-14141",
+      "repo_id": "scikit-learn/scikit-learn",
+      "base_commit": "3d997697fdd166eff428ea9fd35734b6a8ba113e",
+      "turns": 6,
+      "peak_context_tokens": 7488
+    },
+    {
+      "task_id": "scikit-learn__scikit-learn-25747",
+      "repo_id": "scikit-learn/scikit-learn",
+      "base_commit": "2c867b8f822eb7a684f0d5c4359e4426e1c9cfe0",
+      "turns": 5,
+      "peak_context_tokens": 8410
+    },
+    {
+      "task_id": "scikit-learn__scikit-learn-9288",
+      "repo_id": "scikit-learn/scikit-learn",
+      "base_commit": "3eacf948e0f95ef957862568d87ce082f378e186",
+      "turns": 5,
+      "peak_context_tokens": 15024
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-10323",
+      "repo_id": "sphinx-doc/sphinx",
+      "base_commit": "31eba1a76dd485dc633cae48227b46879eda5df4",
+      "turns": 4,
+      "peak_context_tokens": 9400
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-7440",
+      "repo_id": "sphinx-doc/sphinx",
+      "base_commit": "9bb204dcabe6ba0fc422bf4a45ad0c79c680d90b",
+      "turns": 5,
+      "peak_context_tokens": 5961
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-7590",
+      "repo_id": "sphinx-doc/sphinx",
+      "base_commit": "2e506c5ab457cba743bb47eb5b8c8eb9dd51d23d",
+      "turns": 7,
+      "peak_context_tokens": 36749
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-7748",
+      "repo_id": "sphinx-doc/sphinx",
+      "base_commit": "9988d5ce267bf0df4791770b469431b1fb00dcdd",
+      "turns": 5,
+      "peak_context_tokens": 18187
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-7985",
+      "repo_id": "sphinx-doc/sphinx",
+      "base_commit": "f30284ef926ebaf04b176f21b421e2dffc679792",
+      "turns": 4,
+      "peak_context_tokens": 12319
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-8035",
+      "repo_id": "sphinx-doc/sphinx",
+      "base_commit": "5e6da19f0e44a0ae83944fb6ce18f18f781e1a6e",
+      "turns": 4,
+      "peak_context_tokens": 23926
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-8548",
+      "repo_id": "sphinx-doc/sphinx",
+      "base_commit": "dd1615c59dc6fff633e27dbb3861f2d27e1fb976",
+      "turns": 6,
+      "peak_context_tokens": 15185
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-8593",
+      "repo_id": "sphinx-doc/sphinx",
+      "base_commit": "07983a5a8704ad91ae855218ecbda1c8598200ca",
+      "turns": 4,
+      "peak_context_tokens": 16795
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-8638",
+      "repo_id": "sphinx-doc/sphinx",
+      "base_commit": "4b452338f914d4f6b54704222d70ae8a746e3db5",
+      "turns": 4,
+      "peak_context_tokens": 12081
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-9258",
+      "repo_id": "sphinx-doc/sphinx",
+      "base_commit": "06107f838c28ab6ca6bfc2cc208e15997fcb2146",
+      "turns": 4,
+      "peak_context_tokens": 31977
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-9711",
+      "repo_id": "sphinx-doc/sphinx",
+      "base_commit": "81a4fd973d4cfcb25d01a7b0be62cdb28f82406d",
+      "turns": 3,
+      "peak_context_tokens": 13226
+    },
+    {
+      "task_id": "sympy__sympy-12489",
+      "repo_id": "sympy/sympy",
+      "base_commit": "aa9780761ad8c3c0f68beeef3a0ce5caac9e100b",
+      "turns": 4,
+      "peak_context_tokens": 19613
+    },
+    {
+      "task_id": "sympy__sympy-13372",
+      "repo_id": "sympy/sympy",
+      "base_commit": "30379ea6e225e37833a764ac2da7b7fadf5fe374",
+      "turns": 5,
+      "peak_context_tokens": 30019
+    },
+    {
+      "task_id": "sympy__sympy-13480",
+      "repo_id": "sympy/sympy",
+      "base_commit": "f57fe3f4b3f2cab225749e1b3b38ae1bf80b62f0",
+      "turns": 6,
+      "peak_context_tokens": 22907
+    },
+    {
+      "task_id": "sympy__sympy-13757",
+      "repo_id": "sympy/sympy",
+      "base_commit": "a5e6a101869e027e7930e694f8b1cfb082603453",
+      "turns": 5,
+      "peak_context_tokens": 15270
+    },
+    {
+      "task_id": "sympy__sympy-13974",
+      "repo_id": "sympy/sympy",
+      "base_commit": "84c125972ad535b2dfb245f8d311d347b45e5b8a",
+      "turns": 4,
+      "peak_context_tokens": 11355
+    },
+    {
+      "task_id": "sympy__sympy-14248",
+      "repo_id": "sympy/sympy",
+      "base_commit": "9986b38181cdd556a3f3411e553864f11912244e",
+      "turns": 9,
+      "peak_context_tokens": 38807
+    },
+    {
+      "task_id": "sympy__sympy-16766",
+      "repo_id": "sympy/sympy",
+      "base_commit": "b8fe457a02cc24b3470ff678d0099c350b7fef43",
+      "turns": 4,
+      "peak_context_tokens": 15680
+    },
+    {
+      "task_id": "sympy__sympy-18189",
+      "repo_id": "sympy/sympy",
+      "base_commit": "1923822ddf8265199dbd9ef9ce09641d3fd042b9",
+      "turns": 6,
+      "peak_context_tokens": 18753
+    },
+    {
+      "task_id": "sympy__sympy-20428",
+      "repo_id": "sympy/sympy",
+      "base_commit": "c0e85160406f9bf2bcaa2992138587668a1cd0bc",
+      "turns": 8,
+      "peak_context_tokens": 35407
+    },
+    {
+      "task_id": "sympy__sympy-20590",
+      "repo_id": "sympy/sympy",
+      "base_commit": "cffd4e0f86fefd4802349a9f9b19ed70934ea354",
+      "turns": 3,
+      "peak_context_tokens": 22036
+    },
+    {
+      "task_id": "sympy__sympy-21379",
+      "repo_id": "sympy/sympy",
+      "base_commit": "624217179aaf8d094e6ff75b7493ad1ee47599b0",
+      "turns": 5,
+      "peak_context_tokens": 18325
+    },
+    {
+      "task_id": "sympy__sympy-21847",
+      "repo_id": "sympy/sympy",
+      "base_commit": "d9b18c518d64d0ebe8e35a98c2fb519938b9b151",
+      "turns": 5,
+      "peak_context_tokens": 23541
+    },
+    {
+      "task_id": "sympy__sympy-23413",
+      "repo_id": "sympy/sympy",
+      "base_commit": "10de1a18a0efac0b19b611e40c928250dda688bf",
+      "turns": 4,
+      "peak_context_tokens": 23328
+    },
+    {
+      "task_id": "sympy__sympy-23950",
+      "repo_id": "sympy/sympy",
+      "base_commit": "88664e6e0b781d0a8b5347896af74b555e92891e",
+      "turns": 4,
+      "peak_context_tokens": 17339
+    }
+  ]
+}

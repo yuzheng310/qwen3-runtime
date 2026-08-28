@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "engine": "vllm",
+  "case": "prefill",
+  "seed": 20260825,
+  "workload": {
+    "name": "prefill",
+    "scale": "full",
+    "supplementary": false,
+    "model": "Qwen/Qwen3-4B",
+    "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+    "concurrency": 1,
+    "n_requests": 1,
+    "prompt_tokens": 2048,
+    "output_tokens": 16,
+    "poisson_rate": null
+  },
+  "engine_config": {
+    "split": null,
+    "block_size": null,
+    "num_kv_blocks": null,
+    "attention_backend": null,
+    "cuda_graph": false
+  },
+  "environment": {
+    "git_commit": "d972b764934e09eaa417ccb03efe0498ed37d143",
+    "dirty": false,
+    "timestamp_utc": "2026-08-25T17:38:00.307545+00:00",
+    "command": [
+      "python",
+      "-m",
+      "bench.run_bench",
+      "--case",
+      "prefill",
+      "--scale",
+      "full",
+      "--engine",
+      "vllm"
+    ],
+    "python": "3.12.3",
+    "torch": "2.13.0+cu130",
+    "cuda": "13.0",
+    "gpu_name": "NVIDIA GeForce RTX 4090",
+    "gpu_memory_total_bytes": 50866487296,
+    "nvidia_driver": "595.58.03",
+    "triton": "3.7.1",
+    "vllm": "0.27.1",
+    "transformers": "5.15.1",
+    "flash_attn": null,
+    "flashinfer": "0.6.16.post3",
+    "dtype": "bf16"
+  },
+  "forced_length_ok": true,
+  "warmup": 1,
+  "metrics": {
+    "forced_length_ok": true,
+    "ttft_s": {
+      "median": null,
+      "mean": null,
+      "stdev": null,
+      "min": null,
+      "max": null,
+      "spread_flag": false
+    },
+    "tpot_s": {
+      "median": null,
+      "mean": null,
+      "stdev": null,
+      "min": null,
+      "max": null,
+      "spread_flag": false
+    },
+    "output_tok_s": {
+      "median": 60.3076541667395,
+      "mean": 60.29372865201697,
+      "stdev": 0.021218388005797947,
+      "min": 60.26374655465363,
+      "max": 60.30978523465779,
+      "spread_flag": false
+    },
+    "request_per_s": {
+      "median": 3.769228385421219,
+      "mean": 3.768358040751061,
+      "stdev": 0.0013261492503623717,
+      "min": 3.766484159665852,
+      "max": 3.7693615771661118,
+      "spread_flag": false
+    },
+    "itl_s_p50": {
+      "median": null,
+      "mean": null,
+      "stdev": null,
+      "min": null,
+      "max": null,
+      "spread_flag": false
+    },
+    "itl_s_p99": {
+      "median": null,
+      "mean": null,
+      "stdev": null,
+      "min": null,
+      "max": null,
+      "spread_flag": false
+    },
+    "trials": [
+      {
+        "n_requests": 1,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "itl_s_p50": null,
+        "itl_s_p99": null,
+        "output_tok_s": 60.30978523465779,
+        "request_per_s": 3.7693615771661118,
+        "wall_s": 0.2652969155460596,
+        "output_lens": [
+          16
+        ]
+      },
+      {
+        "n_requests": 1,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "itl_s_p50": null,
+        "itl_s_p99": null,
+        "output_tok_s": 60.3076541667395,
+        "request_per_s": 3.769228385421219,
+        "wall_s": 0.2653062902390957,
+        "output_lens": [
+          16
+        ]
+      },
+      {
+        "n_requests": 1,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "itl_s_p50": null,
+        "itl_s_p99": null,
+        "output_tok_s": 60.26374655465363,
+        "request_per_s": 3.766484159665852,
+        "wall_s": 0.26549958996474743,
+        "output_lens": [
+          16
+        ]
+      }
+    ]
+  }
+}

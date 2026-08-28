@@ -1,0 +1,11 @@
+qwen3-runtime
+Copyright 2026 qwen3-runtime contributors
+
+This product includes adaptations and design-derived implementation from
+open-source projects including nano-vllm (MIT), Pico-vLLM (MIT), vllm-lite
+(Apache-2.0), and vLLM (Apache-2.0). It also uses optional/runtime dependencies
+including PyTorch, FlashInfer, HuggingFace Transformers, safetensors, and NumPy.
+
+Detailed source URLs, reviewed revisions, local-file mappings, and relationship
+classifications are maintained in docs/ACKNOWLEDGEMENTS.md. No model weights are
+redistributed with this source distribution.

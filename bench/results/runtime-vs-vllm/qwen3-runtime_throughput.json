@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "engine": "qwen3-runtime",
+  "case": "throughput",
+  "seed": 20260825,
+  "workload": {
+    "name": "throughput",
+    "scale": "full",
+    "supplementary": false,
+    "model": "Qwen/Qwen3-4B",
+    "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+    "concurrency": 16,
+    "n_requests": 16,
+    "prompt_tokens": 256,
+    "output_tokens": 128,
+    "poisson_rate": null
+  },
+  "engine_config": {
+    "split": true,
+    "block_size": 16,
+    "num_kv_blocks": 12054,
+    "attention_backend": "flashinfer",
+    "cuda_graph": true,
+    "max_num_batched_tokens": 4096
+  },
+  "environment": {
+    "git_commit": "d1c479da758361d9232534030e12c6d0c5f70724",
+    "dirty": false,
+    "timestamp_utc": "2026-08-25T19:03:39.005730+00:00",
+    "command": [
+      "python",
+      "-m",
+      "bench.run_bench",
+      "--case",
+      "throughput",
+      "--scale",
+      "full",
+      "--engine",
+      "qwen3-runtime"
+    ],
+    "python": "3.12.3",
+    "torch": "2.8.0+cu128",
+    "cuda": "12.8",
+    "gpu_name": "NVIDIA GeForce RTX 4090",
+    "gpu_memory_total_bytes": 50866487296,
+    "nvidia_driver": "595.58.03",
+    "triton": "3.4.0",
+    "vllm": null,
+    "transformers": "5.15.1",
+    "flash_attn": null,
+    "flashinfer": "0.6.17",
+    "dtype": "bf16"
+  },
+  "forced_length_ok": true,
+  "warmup": 1,
+  "metrics": {
+    "forced_length_ok": true,
+    "ttft_s": {
+      "median": 0.20520793832838535,
+      "mean": 0.20516885941227278,
+      "stdev": 0.00011160764868631462,
+      "min": 0.20501688495278358,
+      "max": 0.20528175495564938,
+      "spread_flag": false
+    },
+    "tpot_s": {
+      "median": 0.011679479998983736,
+      "mean": 0.01167907735963506,
+      "stdev": 1.5185769694382712e-05,
+      "min": 0.01166028061544332,
+      "max": 0.011697471464478125,
+      "spread_flag": false
+    },
+    "output_tok_s": {
+      "median": 1212.8315129171197,
+      "mean": 1212.947769025942,
+      "stdev": 1.328937786161926,
+      "min": 1211.3814042834765,
+      "max": 1214.63038987723,
+      "spread_flag": false
+    },
+    "request_per_s": {
+      "median": 9.475246194664997,
+      "mean": 9.476154445515172,
+      "stdev": 0.010382326454390047,
+      "min": 9.46391722096466,
+      "max": 9.48929992091586,
+      "spread_flag": false
+    },
+    "itl_s_p50": {
+      "median": 0.011601097881793976,
+      "mean": 0.01160070113837719,
+      "stdev": 2.323358463807998e-06,
+      "min": 0.011597678065299988,
+      "max": 0.011603327468037605,
+      "spread_flag": false
+    },
+    "itl_s_p99": {
+      "median": 0.013733681291341782,
+      "mean": 0.013724824413657188,
+      "stdev": 0.0004443258388379341,
+      "min": 0.013176264241337776,
+      "max": 0.014264527708292007,
+      "spread_flag": true
+    },
+    "trials": [
+      {
+        "n_requests": 16,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": 0.20520793832838535,
+          "mean": 0.20520793832838535,
+          "stdev": 0.0,
+          "min": 0.20520793832838535,
+          "max": 0.20520793832838535,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": 0.01166028061544332,
+          "mean": 0.01166028061544332,
+          "stdev": 0.0,
+          "min": 0.01166028061544332,
+          "max": 0.01166028061544332,
+          "spread_flag": false
+        },
+        "itl_s_p50": 0.011597678065299988,
+        "itl_s_p99": 0.013176264241337776,
+        "output_tok_s": 1214.63038987723,
+        "request_per_s": 9.48929992091586,
+        "wall_s": 1.6861096322536469,
+        "output_lens": [
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128
+        ]
+      },
+      {
+        "n_requests": 16,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": 0.20501688495278358,
+          "mean": 0.20501688495278358,
+          "stdev": 0.0,
+          "min": 0.20501688495278358,
+          "max": 0.20501688495278358,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": 0.011697471464478125,
+          "mean": 0.011697471464478125,
+          "stdev": 0.0,
+          "min": 0.011697471464478125,
+          "max": 0.011697471464478125,
+          "spread_flag": false
+        },
+        "itl_s_p50": 0.011603327468037605,
+        "itl_s_p99": 0.014264527708292007,
+        "output_tok_s": 1211.3814042834765,
+        "request_per_s": 9.46391722096466,
+        "wall_s": 1.6906318627297878,
+        "output_lens": [
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128
+        ]
+      },
+      {
+        "n_requests": 16,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": 0.20528175495564938,
+          "mean": 0.20528175495564938,
+          "stdev": 0.0,
+          "min": 0.20528175495564938,
+          "max": 0.20528175495564938,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": 0.011679479998983736,
+          "mean": 0.011679479998983736,
+          "stdev": 0.0,
+          "min": 0.011679479998983736,
+          "max": 0.011679479998983736,
+          "spread_flag": false
+        },
+        "itl_s_p50": 0.011601097881793976,
+        "itl_s_p99": 0.013733681291341782,
+        "output_tok_s": 1212.8315129171197,
+        "request_per_s": 9.475246194664997,
+        "wall_s": 1.688610477373004,
+        "output_lens": [
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128
+        ]
+      }
+    ]
+  }
+}

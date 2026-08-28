@@ -1,0 +1,27 @@
+{
+  "model_repo": "OpenHands/CodeScout-4B",
+  "model_revision": "eb233041350295c9ba74de5c6777e15fca0c8ddc",
+  "weights_first_commit": "b2589c286c404cd9c8f7f236e2bafe6815921736",
+  "tokenizer_repo": "OpenHands/CodeScout-4B",
+  "tokenizer_revision": "eb233041350295c9ba74de5c6777e15fca0c8ddc",
+  "base_model": "Qwen/Qwen3-4B-Instruct-2507",
+  "base_model_revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+  "codescout_source": "https://github.com/OpenHands/codescout",
+  "codescout_revision": "34789dcb21cc9e6595c2d27ad832f69ab146006f",
+  "eval_rollouts_repo": "OpenHands/CodeScout_Eval_Rollouts",
+  "eval_rollouts_revision": "c8150bdfcd7589cafb1717a5e9efd151a4b41b59",
+  "eval_rollouts_config": "codescout_4b",
+  "eval_rollouts_split": "swe_bench_verified",
+  "gold_repo": "OpenHands/SWE-bench_Verified-locagent",
+  "gold_revision": "ffa2f8bf98d03bc317695ad31594cd080d503a76",
+  "eval_harness": "https://github.com/adityasoni9998/benchmarks",
+  "eval_harness_branch": "agentic_code_search",
+  "eval_harness_revision": "7cf83b841010d1cc939745a155dc53d99ff8bf22",
+  "openhands_sdk_revision": "85ecfd9333d2d2cc4404dd460fd38868d9b978e2",
+  "collection": "https://huggingface.co/collections/OpenHands/codescout-69b9a6adcf21f348f4db937f",
+  "notes": [
+    "Tokenizer files live in the model repo; there is no separate tokenizer repository.",
+    "weights_first_commit is the Duplicate-from upload; later commits on main are README/citation/figures only.",
+    "Do not use the alias main/latest in Stage-2 measurements."
+  ]
+}

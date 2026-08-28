@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "engine": "vllm",
+  "case": "batch8",
+  "seed": 20260825,
+  "workload": {
+    "name": "batch8",
+    "scale": "full",
+    "supplementary": false,
+    "model": "Qwen/Qwen3-4B",
+    "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+    "concurrency": 8,
+    "n_requests": 8,
+    "prompt_tokens": 256,
+    "output_tokens": 128,
+    "poisson_rate": null
+  },
+  "engine_config": {
+    "split": null,
+    "block_size": null,
+    "num_kv_blocks": null,
+    "attention_backend": null,
+    "cuda_graph": false
+  },
+  "environment": {
+    "git_commit": "d972b764934e09eaa417ccb03efe0498ed37d143",
+    "dirty": false,
+    "timestamp_utc": "2026-08-25T17:36:58.900838+00:00",
+    "command": [
+      "python",
+      "-m",
+      "bench.run_bench",
+      "--case",
+      "batch8",
+      "--scale",
+      "full",
+      "--engine",
+      "vllm"
+    ],
+    "python": "3.12.3",
+    "torch": "2.13.0+cu130",
+    "cuda": "13.0",
+    "gpu_name": "NVIDIA GeForce RTX 4090",
+    "gpu_memory_total_bytes": 50866487296,
+    "nvidia_driver": "595.58.03",
+    "triton": "3.7.1",
+    "vllm": "0.27.1",
+    "transformers": "5.15.1",
+    "flash_attn": null,
+    "flashinfer": "0.6.16.post3",
+    "dtype": "bf16"
+  },
+  "forced_length_ok": true,
+  "warmup": 1,
+  "metrics": {
+    "forced_length_ok": true,
+    "ttft_s": {
+      "median": null,
+      "mean": null,
+      "stdev": null,
+      "min": null,
+      "max": null,
+      "spread_flag": false
+    },
+    "tpot_s": {
+      "median": null,
+      "mean": null,
+      "stdev": null,
+      "min": null,
+      "max": null,
+      "spread_flag": false
+    },
+    "output_tok_s": {
+      "median": 709.5831682761598,
+      "mean": 709.7746996318356,
+      "stdev": 0.38616454790564947,
+      "min": 709.4275529120896,
+      "max": 710.3133777072574,
+      "spread_flag": false
+    },
+    "request_per_s": {
+      "median": 5.543618502157498,
+      "mean": 5.545114840873715,
+      "stdev": 0.0030169105305128865,
+      "min": 5.5424027571257,
+      "max": 5.549323263337948,
+      "spread_flag": false
+    },
+    "itl_s_p50": {
+      "median": null,
+      "mean": null,
+      "stdev": null,
+      "min": null,
+      "max": null,
+      "spread_flag": false
+    },
+    "itl_s_p99": {
+      "median": null,
+      "mean": null,
+      "stdev": null,
+      "min": null,
+      "max": null,
+      "spread_flag": false
+    },
+    "trials": [
+      {
+        "n_requests": 8,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "itl_s_p50": null,
+        "itl_s_p99": null,
+        "output_tok_s": 709.5831682761598,
+        "request_per_s": 5.543618502157498,
+        "wall_s": 1.4431007467210293,
+        "output_lens": [
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128
+        ]
+      },
+      {
+        "n_requests": 8,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "itl_s_p50": null,
+        "itl_s_p99": null,
+        "output_tok_s": 709.4275529120896,
+        "request_per_s": 5.5424027571257,
+        "wall_s": 1.4434172958135605,
+        "output_lens": [
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128
+        ]
+      },
+      {
+        "n_requests": 8,
+        "forced_length_ok": true,
+        "ttft_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "tpot_s": {
+          "median": null,
+          "mean": null,
+          "stdev": null,
+          "min": null,
+          "max": null,
+          "spread_flag": false
+        },
+        "itl_s_p50": null,
+        "itl_s_p99": null,
+        "output_tok_s": 710.3133777072574,
+        "request_per_s": 5.549323263337948,
+        "wall_s": 1.4416172243654728,
+        "output_lens": [
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128,
+          128
+        ]
+      }
+    ]
+  }
+}

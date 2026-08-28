@@ -1,0 +1,51 @@
+"""Prefix-cache invariance: cold, warm, and shared-prefix paths match the uncached path."""
+
+import torch
+
+from qwen3_runtime.config import Config
+from qwen3_runtime.engine.engine import Engine
+from qwen3_runtime.engine.model_runner import PagedRunner
+from qwen3_runtime.models.qwen3 import Qwen3ForCausalLM
+from tests.cpu.test_tiny_qwen3 import tiny_config
+
+
+def _engine(model, *, cache: bool) -> Engine:
+    cfg = Config(
+        block_size=4,
+        num_kv_blocks=64,
+        max_num_seqs=4,
+        max_num_batched_tokens=32,
+        enable_prefix_cache=cache,
+    )
+    return Engine(cfg, PagedRunner(model))
+
+
+def test_same_prompt_cold_and_warm_match_uncached():
+    torch.manual_seed(31)
+    model = Qwen3ForCausalLM(tiny_config()).eval()
+    prompt = list(range(1, 13))
+    uncached = _engine(model, cache=False).generate(prompt, max_tokens=4)
+    eng = _engine(model, cache=True)
+    cold = eng.generate(prompt, max_tokens=4)
+    warm = eng.generate(prompt, max_tokens=4)
+    assert cold == uncached
+    assert warm == uncached
+    assert eng.block_manager.cache_blocks >= 1
+
+
+def test_shared_prefix_matches_uncached_path():
+    torch.manual_seed(32)
+    model = Qwen3ForCausalLM(tiny_config()).eval()
+    prefix = [1, 2, 3, 4, 5, 6, 7, 8]
+    a = prefix + [9, 10]
+    b = prefix + [11, 12]
+    uncached_a = _engine(model, cache=False).generate(a, max_tokens=3)
+    uncached_b = _engine(model, cache=False).generate(b, max_tokens=3)
+    eng = _engine(model, cache=True)
+    got_a = eng.generate(a, max_tokens=3)
+    got_b = eng.generate(b, max_tokens=3)
+    assert got_a == uncached_a
+    assert got_b == uncached_b
+    rid = eng.add_request(b, max_tokens=3)
+    req = eng._requests[rid]
+    assert req.cached_tokens == 8

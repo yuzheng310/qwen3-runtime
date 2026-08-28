@@ -1,0 +1,25 @@
+name: cpu-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: uv sync --frozen --all-extras
+      - name: Test
+        run: uv run --frozen python -m pytest tests/ -q
+      - name: Build package
+        run: uv build
+      - name: Check headline JSON when present
+        run: |
+          if ls bench/results/raw/*.json >/dev/null 2>&1; then
+            uv run --frozen python -m bench.report --check bench/results/raw
+          fi
