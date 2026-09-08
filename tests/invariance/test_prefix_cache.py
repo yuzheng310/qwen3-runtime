@@ -6,6 +6,7 @@ from qwen3_runtime.config import Config
 from qwen3_runtime.engine.engine import Engine
 from qwen3_runtime.engine.model_runner import PagedRunner
 from qwen3_runtime.models.qwen3 import Qwen3ForCausalLM
+from qwen3_runtime.sampling import SamplingParams
 from tests.cpu.test_tiny_qwen3 import tiny_config
 
 
@@ -49,3 +50,17 @@ def test_shared_prefix_matches_uncached_path():
     rid = eng.add_request(b, max_tokens=3)
     req = eng._requests[rid]
     assert req.cached_tokens == 8
+
+
+def test_seeded_hold_kv_output_unchanged_with_prefix_cache():
+    """APC is a memory optimization; a fixed seed must not move sampled tokens."""
+    torch.manual_seed(41)
+    model = Qwen3ForCausalLM(tiny_config()).eval()
+    prompt = list(range(1, 13))
+    def run(*, cache: bool) -> list[int]:
+        eng = _engine(model, cache=cache)
+        params = SamplingParams(temperature=0.8, top_p=0.9, top_k=8, seed=7)
+        rid = eng.add_request(prompt, max_tokens=4, hold_kv=True, sampling=params)
+        return eng.drain_request(rid)
+
+    assert run(cache=False) == run(cache=True)

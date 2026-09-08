@@ -2,9 +2,9 @@ import torch
 
 from qwen3_runtime.config import Config
 from qwen3_runtime.engine.engine import Engine
-from qwen3_runtime.engine.model_runner import PytorchEagerRunner
+from qwen3_runtime.reference.eager_runner import PytorchEagerRunner
 from qwen3_runtime.models.qwen3 import Qwen3ForCausalLM, Qwen3ModelConfig
-from qwen3_runtime.sampling import greedy
+from qwen3_runtime.sampling import greedy_logits
 
 
 def tiny_config() -> Qwen3ModelConfig:
@@ -30,7 +30,7 @@ def _sequential_greedy(model: Qwen3ForCausalLM, prompt: list[int], max_tokens: i
             x = torch.tensor(ids, dtype=torch.long)
             pos = torch.arange(len(ids), dtype=torch.long)
             logits = model(x, pos)
-            ids.append(greedy([logits[-1].tolist()])[0])
+            ids.append(greedy_logits(logits[-1:].contiguous())[0])
     return ids[len(prompt) :]
 
 

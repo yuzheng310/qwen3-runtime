@@ -18,7 +18,7 @@ from qwen3_runtime.engine.memory import (
     estimate_weight_bytes,
     kv_budget_for_simulated_card,
 )
-from qwen3_runtime.engine.serve import (
+from qwen3_runtime.serving.slo_harness import (
     SessionTurn,
     always_admit,
     request_slo_admit,

@@ -28,7 +28,6 @@ def _paged_context(backend: str, q: torch.Tensor, k: torch.Tensor, v: torch.Tens
         device=q.device,
     )
     if start:
-        # Prefix already in the pool (decode / chunked prefill).
         torch.manual_seed(0)
         pk = torch.randn(start, n_kv, head_dim, dtype=q.dtype, device=q.device)
         pv = torch.randn(start, n_kv, head_dim, dtype=q.dtype, device=q.device)
@@ -43,56 +42,46 @@ def _paged_context(backend: str, q: torch.Tensor, k: torch.Tensor, v: torch.Tens
     return paged_context(backend, q, k, v, batch, 0, n_heads, n_kv, head_dim)
 
 
-def test_paged_sdpa_matches_explicit_on_prefill_and_decode():
-    """SDPA bool mask is True=keep (docs), not True=mask-out (MHA). Greedy token equality can hide this."""
+@pytest.mark.skipif(importlib.util.find_spec("flashinfer") is None, reason="flashinfer not installed")
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="flashinfer paged kernels need CUDA")
+def test_paged_flashinfer_matches_pytorch_on_prefill_and_decode():
     torch.manual_seed(3)
-    q_len, kv_len, n_heads, n_kv, head_dim = 4, 4, 4, 2, 8
-    q = torch.randn(q_len, n_heads, head_dim)
-    k = torch.randn(q_len, n_kv, head_dim)
-    v = torch.randn(q_len, n_kv, head_dim)
+    device = torch.device("cuda")
+    q_len, kv_len, n_heads, n_kv, head_dim = 4, 4, 4, 2, 128
+    q = torch.randn(q_len, n_heads, head_dim, device=device, dtype=torch.bfloat16)
+    k = torch.randn(q_len, n_kv, head_dim, device=device, dtype=torch.bfloat16)
+    v = torch.randn(q_len, n_kv, head_dim, device=device, dtype=torch.bfloat16)
     pt = _paged_context("pytorch", q, k, v, kv_len)
-    sdpa = _paged_context("sdpa", q.clone(), k.clone(), v.clone(), kv_len)
-    torch.testing.assert_close(sdpa, pt, atol=1e-5, rtol=1e-5)
+    fi = _paged_context("flashinfer", q.clone(), k.clone(), v.clone(), kv_len)
+    torch.testing.assert_close(fi.float(), pt.float(), atol=2e-2, rtol=2e-2)
 
-    q1 = torch.randn(1, n_heads, head_dim)
-    k1 = torch.randn(1, n_kv, head_dim)
-    v1 = torch.randn(1, n_kv, head_dim)
+    q1 = torch.randn(1, n_heads, head_dim, device=device, dtype=torch.bfloat16)
+    k1 = torch.randn(1, n_kv, head_dim, device=device, dtype=torch.bfloat16)
+    v1 = torch.randn(1, n_kv, head_dim, device=device, dtype=torch.bfloat16)
     pt_d = _paged_context("pytorch", q1, k1, v1, kv_len=6)
-    sdpa_d = _paged_context("sdpa", q1.clone(), k1.clone(), v1.clone(), kv_len=6)
-    torch.testing.assert_close(sdpa_d, pt_d, atol=1e-5, rtol=1e-5)
+    fi_d = _paged_context("flashinfer", q1.clone(), k1.clone(), v1.clone(), kv_len=6)
+    torch.testing.assert_close(fi_d.float(), pt_d.float(), atol=2e-2, rtol=2e-2)
 
 
-def test_sdpa_paged_generate_matches_pytorch_explicit():
+@pytest.mark.skipif(importlib.util.find_spec("flashinfer") is None, reason="flashinfer not installed")
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="flashinfer generate needs CUDA")
+def test_flashinfer_paged_generate_matches_pytorch_explicit():
     torch.manual_seed(22)
     cfg = tiny_config()
     pytorch = Qwen3ForCausalLM(cfg, attention_backend="pytorch").eval()
-    sdpa = Qwen3ForCausalLM(cfg, attention_backend="sdpa").eval()
-    sdpa.load_state_dict(pytorch.state_dict())
+    fi_model = Qwen3ForCausalLM(cfg, attention_backend="flashinfer").eval()
+    fi_model.load_state_dict(pytorch.state_dict())
+    device = torch.device("cuda")
+    pytorch = pytorch.to(device)
+    fi_model = fi_model.to(device)
     prompt = [1, 4, 7, 2, 9, 3]
     engine_cfg = Config(block_size=4, num_kv_blocks=32, max_num_seqs=2, max_num_batched_tokens=16)
     a = Engine(engine_cfg, PagedRunner(pytorch)).generate(prompt, max_tokens=4)
     b = Engine(
         Config(block_size=4, num_kv_blocks=32, max_num_seqs=2, max_num_batched_tokens=16),
-        PagedRunner(sdpa),
+        PagedRunner(fi_model),
     ).generate(prompt, max_tokens=4)
     assert a == b
-
-
-def test_flash_attn_backend_without_package_raises():
-    if importlib.util.find_spec("flash_attn"):
-        pytest.skip("flash_attn installed; gather+FA path is live")
-    with pytest.raises(NotImplementedError):
-        paged_context(
-            "flash_attn",
-            torch.zeros(1, 4, 4),
-            torch.zeros(1, 2, 4),
-            torch.zeros(1, 2, 4),
-            None,  # type: ignore[arg-type]
-            0,
-            4,
-            2,
-            4,
-        )
 
 
 def test_flashinfer_backend_without_package_raises():

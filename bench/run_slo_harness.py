@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     from qwen3_runtime.engine.engine import Engine
     from qwen3_runtime.engine.factory import build_engine
     from qwen3_runtime.engine.model_runner import PagedRunner
-    from qwen3_runtime.engine.serve import run_poisson
+    from qwen3_runtime.serving.slo_harness import run_poisson
     from qwen3_runtime.models.qwen3 import Qwen3ForCausalLM, Qwen3ModelConfig
 
     if args.tiny:

@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--attention-backend",
         default=None,
-        choices=("pytorch", "sdpa", "flash_attn", "flashinfer", "triton"),
+        choices=("pytorch", "flashinfer", "triton"),
         help="Explicit attention backend. Default: factory (flashinfer on CUDA if installed).",
     )
     parser.add_argument(
@@ -105,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         from qwen3_runtime.config import Config
         from qwen3_runtime.engine.engine import Engine
         from qwen3_runtime.engine.model_runner import PagedRunner
-        from qwen3_runtime.engine.serve import run_closed_batch
+        from qwen3_runtime.serving.slo_harness import run_closed_batch
 
         prompt = list(range(1, 9))
         engine = Engine(
@@ -199,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
             "poisson_rate": workload.poisson_rate,
         },
         "engine_config": {
-            "split": bool(getattr(engine, "runner", None).__class__.__name__ == "SplitPagedRunner")
+            "split": bool(getattr(getattr(engine, "runner", None), "split", False))
             if engine is not None
             else None,
             "block_size": getattr(getattr(engine, "config", None), "block_size", None),

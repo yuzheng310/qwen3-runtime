@@ -41,7 +41,34 @@ def test_session_kv_teacher_force_appends_only_suffix():
     assert [list(t.tokens) for t in traces] == [[8, 9], [22]]
     assert extra["later_turn_prefill_tokens"] > 0
     assert extra["first_turn_prefill_tokens"] >= 3
+    assert extra["hold_kv"] is True
+    assert extra["enable_prefix_cache"] is False
+    assert extra["n_full_add_turns"] == 1
     assert engine.block_manager.num_free_blocks == engine.block_manager.num_blocks
+
+
+def test_session_kv_without_hold_prefills_every_turn():
+    engine = _engine(token_budget=64, num_blocks=32, block_size=4)
+    items = [
+        {
+            "task_id": "t0",
+            "turn_id": 0,
+            "input_ids": [1, 2, 3],
+            "output_ids": [8, 9],
+            "max_tokens": 2,
+        },
+        {
+            "task_id": "t0",
+            "turn_id": 1,
+            "input_ids": [1, 2, 3, 8, 9, 20, 21],
+            "output_ids": [22],
+            "max_tokens": 1,
+        },
+    ]
+    _traces, extra = run_session_kv_on_engine(engine, items, nvtx=False, hold_kv=False)
+    assert extra["n_full_add_turns"] == 2
+    assert extra["n_resumed_turns"] == 0
+    assert extra["hold_kv"] is False
 
 
 def test_session_kv_reports_source_forced_length_mismatch():

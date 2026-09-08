@@ -126,7 +126,7 @@ def test_git_dirty_sees_this_repo():
 
 
 def test_length_split_metrics_bimodal():
-    from qwen3_runtime.engine.serve import RequestTrace
+    from qwen3_runtime.serving.slo_harness import RequestTrace
 
     short = RequestTrace(request_id=1, arrival_s=0.0, prompt_len=256, max_tokens=4)
     short.admitted = True

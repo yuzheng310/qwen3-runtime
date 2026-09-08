@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """HF greedy token-id gate. HuggingFace generate() defaults are not used.
 
-  QWEN3_RUNTIME_MODEL=/path/to/Qwen3-4B python -m qwen3_runtime.correctness.cli
+  QWEN3_RUNTIME_MODEL=/path/to/Qwen3-4B python -m qwen3_runtime.reference.cli
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import os
 
-from qwen3_runtime.correctness.hf_greedy import hf_greedy_tokens, runtime_greedy_tokens
+from qwen3_runtime.reference.hf_greedy import hf_greedy_tokens, runtime_greedy_tokens
 from qwen3_runtime.engine.factory import build_engine, select_attention_backend
 from qwen3_runtime.engine.memory import bytes_per_block
 

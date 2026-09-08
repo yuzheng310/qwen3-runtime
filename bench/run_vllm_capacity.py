@@ -37,7 +37,7 @@ from bench.vllm_slo import note_new_tokens
 from bench.workloads import SEED, TTFT_LENGTHS, make_prompts, mix_length_prompts, poisson_arrivals
 from qwen3_runtime.engine.factory import PIN
 from qwen3_runtime.engine.memory import kv_budget_for_simulated_card
-from qwen3_runtime.engine.serve import (
+from qwen3_runtime.serving.slo_harness import (
     BacklogSample,
     RequestTrace,
     ServeRun,

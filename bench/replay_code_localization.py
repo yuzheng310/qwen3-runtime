@@ -185,7 +185,7 @@ def _phase_metrics(traces) -> dict:
 
 def replay_ours(items: list[dict], model: Path, *, nvtx: bool, warmup: int = 1) -> tuple[list, float]:
     from qwen3_runtime.engine.factory import build_engine
-    from qwen3_runtime.engine.serve import run_sequential_requests
+    from qwen3_runtime.serving.slo_harness import run_sequential_requests
 
     engine = build_engine(
         model,
@@ -368,10 +368,24 @@ def main() -> None:
         "Does not overwrite historical full-reprefill JSON. Uses SESSION_IDS dump.",
     )
     parser.add_argument(
+        "--kv-arm",
+        choices=("none", "session-only", "apc-only", "session+apc"),
+        default=None,
+        help="qwen3-runtime 2x2 (session × APC). Teacher-forced replay. "
+        "APC arms force warmup=0. Overrides --session-kv / --enable-prefix-caching.",
+    )
+    parser.add_argument(
         "--enable-prefix-caching",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="vLLM Automatic Prefix Caching. Default off (fair Stage-2). Stage-2.5 APC ON uses --enable-prefix-caching.",
+        help="Automatic Prefix Caching. vLLM: LLM(enable_prefix_caching). "
+        "qwen3-runtime: Config.enable_prefix_cache (Harness A APC arms).",
+    )
+    parser.add_argument(
+        "--simulate-card-gib",
+        type=float,
+        default=None,
+        help="Pin KV via kv_budget_for_simulated_card. Default: factory pool on this card.",
     )
     parser.add_argument(
         "--speculative-config",
@@ -395,21 +409,31 @@ def main() -> None:
 
     if not CODESCOUT_PIN.exists():
         raise SystemExit(f"missing CodeScout pin {CODESCOUT_PIN}")
-    if not TOKENIZER.exists():
-        raise SystemExit(f"missing tokenizer dir {TOKENIZER}")
-    if not ROLLOUTS.exists():
-        raise SystemExit(f"missing rollouts parquet {ROLLOUTS}")
 
     task_ids = None if args.all_tasks else load_subset_ids(args.subset)
+    kv_arm = args.kv_arm
+    hold_kv = {"none": False, "session-only": True, "apc-only": False, "session+apc": True}.get(
+        kv_arm, bool(args.session_kv)
+    )
+    ours_apc = {"none": False, "session-only": False, "apc-only": True, "session+apc": True}.get(
+        kv_arm, bool(args.enable_prefix_caching) if args.engine == "qwen3-runtime" else False
+    )
+    use_session_replay = args.engine == "qwen3-runtime" and (kv_arm is not None or hold_kv or ours_apc)
     ids_path = args.ids
-    if args.session_kv and args.ids == HISTORICAL_IDS:
+    if use_session_replay and args.ids == HISTORICAL_IDS:
         ids_path = SESSION_IDS
+    have_dump = ids_path.exists() and not args.all_tasks
+    if not have_dump:
+        if not TOKENIZER.exists():
+            raise SystemExit(f"missing tokenizer dir {TOKENIZER}")
+        if not ROLLOUTS.exists():
+            raise SystemExit(f"missing rollouts parquet {ROLLOUTS}")
     if ids_path.exists() and not args.all_tasks:
         items = load_dumped_items(ids_path)
         if task_ids is not None:
             wanted = set(task_ids)
             items = [it for it in items if it["task_id"] in wanted]
-        if args.session_kv and any(not it.get("output_ids") for it in items):
+        if use_session_replay and any(not it.get("output_ids") for it in items):
             items = reconstruct_items(task_ids)
             dump_items(ids_path, items)
     else:
@@ -426,22 +450,39 @@ def main() -> None:
         raise SystemExit("--engine, --model, and --out are required unless --dump-only")
     print(f"replay {len(items)} requests engine={args.engine} model={args.model}")
 
+    kv_budget = None
+    if args.simulate_card_gib is not None:
+        from qwen3_runtime.engine.memory import kv_budget_for_simulated_card
+        from qwen3_runtime.models.qwen3 import Qwen3ModelConfig
+        import json as _json
+
+        model_cfg = Qwen3ModelConfig.from_hf_config(_json.loads(CODESCOUT_PIN.read_text()))
+        kv_budget = kv_budget_for_simulated_card(model_cfg, args.simulate_card_gib)
+
     apc_extra: dict = {}
     session_extra: dict = {}
-    if args.engine == "qwen3-runtime" and args.session_kv:
+    if use_session_replay:
         from bench.session_kv_replay import replay_ours_session_kv
 
+        warmup = 0 if ours_apc else args.warmup
         traces, wall, session_extra = replay_ours_session_kv(
             items,
             args.model,
             nvtx=args.nvtx,
-            warmup=args.warmup,
+            warmup=warmup,
             pin_path=CODESCOUT_PIN,
             num_speculative_tokens=args.num_speculative_tokens,
             ngram_min=args.ngram_min,
             ngram_max=args.ngram_max,
+            enable_prefix_cache=ours_apc,
+            hold_kv=hold_kv,
+            kv_budget=kv_budget,
         )
-        prefix_cache = False
+        if kv_arm is None:
+            kv_arm = { (True, True): "session+apc", (True, False): "session-only",
+                       (False, True): "apc-only", (False, False): "none" }[(hold_kv, ours_apc)]
+        session_extra["kv_arm"] = kv_arm
+        prefix_cache = ours_apc
     elif args.engine == "qwen3-runtime":
         traces, wall = replay_ours(items, args.model, nvtx=args.nvtx, warmup=args.warmup)
         prefix_cache = False
@@ -473,7 +514,7 @@ def main() -> None:
         return h.hexdigest()
 
     summary = summarize_traces(traces, wall)
-    if args.session_kv and session_extra.get("source_forced_length_ok") is not True:
+    if use_session_replay and session_extra.get("source_forced_length_ok") is not True:
         summary["forced_length_ok"] = False
     req_walls = apc_extra.get("request_wall_s") or []
     if not req_walls:
@@ -505,7 +546,8 @@ def main() -> None:
         "model_pin": "OpenHands/CodeScout-4B@eb233041350295c9ba74de5c6777e15fca0c8ddc",
         "codescout_pin": str(CODESCOUT_PIN.relative_to(ROOT)),
         "codescout_source": codescout_env,
-        "session_kv": bool(args.session_kv),
+        "session_kv": bool(hold_kv) if args.engine == "qwen3-runtime" else bool(args.session_kv),
+        "kv_arm": kv_arm,
         "n_requests": len(items),
         "n_tasks": n_tasks,
         "subset": None if args.all_tasks else str(args.subset),
@@ -514,7 +556,7 @@ def main() -> None:
         "nvtx": args.nvtx if args.engine == "qwen3-runtime" else None,
         "prefix_cache": prefix_cache,
         "chunk_tokens": 2048,
-        "warmup": args.warmup,
+        "warmup": 0 if (args.engine == "qwen3-runtime" and ours_apc) else args.warmup,
         "trials": [{"wall_s": wall, "n_requests": len(items)}],
         "workload": {
             "name": "replay_subset_v1" if not args.all_tasks else "code-localization-trace-v1",
@@ -529,7 +571,10 @@ def main() -> None:
             "max_num_seqs": 1,
             "max_num_batched_tokens": 2048,
             "pin_path": str(CODESCOUT_PIN.relative_to(ROOT)),
-            "session_kv": bool(args.session_kv),
+            "session_kv": bool(hold_kv) if args.engine == "qwen3-runtime" else bool(args.session_kv),
+            "enable_prefix_cache": prefix_cache if args.engine == "qwen3-runtime" else None,
+            "kv_arm": kv_arm,
+            "simulate_card_gib": args.simulate_card_gib,
             "num_speculative_tokens": args.num_speculative_tokens,
             "ngram_min": args.ngram_min,
             "ngram_max": args.ngram_max,

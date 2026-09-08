@@ -1,3 +1,7 @@
+"""Device paged KV pool and the five-field PagedBatch the model consumes."""
+
+from __future__ import annotations
+
 from dataclasses import dataclass
 from collections.abc import Sequence
 
@@ -6,29 +10,21 @@ import torch
 
 @dataclass
 class PagedBatch:
-    pool: "PagedKVPool"
-    slot_mapping: torch.Tensor
-    block_tables: list
-    kv_lens: list[int]
-    cu_seqlens: list[int]
-    # Filled on first FlashInfer layer of a forward so plan() is once, not per layer.
-    flashinfer_mode: str | None = None
-    # Optional decode wrapper (CUDA-graph persistent buffers). None = shared eager wrapper.
-    flashinfer_wrapper: object | None = None
-    # Graph decode: FlashInfer append_paged_kv_cache metadata (int32, device).
-    append_batch_indices: torch.Tensor | None = None
-    append_positions: torch.Tensor | None = None
-    # Packed page table for the Triton decode backend; filled once per forward.
-    triton_block_table: torch.Tensor | None = None
-    triton_kv_lens: torch.Tensor | None = None
-    # Frozen split-K count for CUDA Graph capture. None = pick from kv_len.
-    triton_num_splits: int | None = None
+    """One packed forward. Five fields; backend scratch lives on ``AttentionState``."""
+
+    pool: PagedKVPool
+    slot_mapping: torch.Tensor  # [T] physical slots for the scheduled tokens
+    block_tables: list  # per-sequence physical page ids
+    kv_lens: list[int]  # per-sequence KV length after this forward
+    cu_seqlens: list[int]  # packed query prefix sums, length = batch + 1
 
 
 class PagedKVPool:
     """Physical KV blocks. Layout: [K/V, layer, block, offset, kv_head, dim].
 
     Not a per-request [max_seq_len] tensor. Slot = block_id * block_size + offset.
+
+    4B default: [2, 36, num_blocks, 16, 8, 128].
     """
 
     def __init__(

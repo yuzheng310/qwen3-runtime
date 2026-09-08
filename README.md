@@ -15,7 +15,7 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-4C8BF5?style=flat-square"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"></a>
   <a href="docs/pins/Qwen3-4B/config.json"><img alt="Model" src="https://img.shields.io/badge/model-Qwen3-7C3AED?style=flat-square"></a>
-  <a href="TEST_RESULTS.md"><img alt="Tests" src="https://img.shields.io/badge/tests-175%20passed-2EA44F?style=flat-square"></a>
+  <a href="TEST_RESULTS.md"><img alt="Tests" src="https://img.shields.io/badge/tests-327%20passed-2EA44F?style=flat-square"></a>
   <a href="RESULTS.md"><img alt="vLLM parity" src="https://img.shields.io/badge/vLLM%20parity-94.7--97.7%25-F59E0B?style=flat-square"></a>
 </p>
 
@@ -74,7 +74,7 @@ read end to end, test in isolation, and modify without pulling apart the stack.
     <td align="center"><strong>94.70–97.70%</strong><br><sub>of vLLM throughput</sub></td>
     <td align="center"><strong>70.6%</strong><br><sub>of prompt tokens</sub></td>
     <td align="center"><strong>1,901 / 1,901</strong><br><sub>adjacent turns</sub></td>
-    <td align="center"><strong>175 passed</strong><br><sub>16 resource skips</sub></td>
+    <td align="center"><strong>327 passed</strong><br><sub>18 resource skips</sub></td>
   </tr>
 </table>
 

@@ -1,3 +1,7 @@
+"""Host-side physical KV block allocator and prefix-cache attach/publish."""
+
+from __future__ import annotations
+
 from collections import deque
 from collections.abc import Callable
 
@@ -37,6 +41,7 @@ class BlockManager:
         self._ref_count = [0] * num_blocks
         self._cache = PrefixCache()
         self._copy_block: BlockCopier | None = None
+        self.epoch = 0  # bumped on reset(); leftover tables from a prior epoch are stale
 
     def set_block_copier(self, copy_block: BlockCopier | None) -> None:
         self._copy_block = copy_block
@@ -78,6 +83,7 @@ class BlockManager:
     def allocate_for_tokens(self, req: Request, num_tokens: int) -> None:
         if num_tokens < 0:
             raise ValueError("num_tokens must be non-negative")
+        req.kv_epoch = self.epoch
         if not self.can_allocate_tokens(req, num_tokens):
             raise RuntimeError("KV pool exhausted")
         start = req.num_computed_tokens
@@ -95,6 +101,17 @@ class BlockManager:
         for block_id in req.block_table:
             self._decref(block_id)
         req.block_table.clear()
+
+    def reset(self) -> None:
+        """Forget every allocation. Caller must have deallocated live requests.
+
+        Sleep/wake and post-update invalidation rebuild the free list from scratch
+        so a later resume cannot keep a stale physical id into a new pool.
+        """
+        self._cache.clear()
+        self._free = deque(range(self.num_blocks))
+        self._ref_count = [0] * self.num_blocks
+        self.epoch += 1
 
     def truncate_kv(self, req: Request, num_tokens: int) -> None:
         """Drop trailing block-table entries so the table covers ``num_tokens`` slots.
@@ -184,7 +201,7 @@ class BlockManager:
         if not self.enable_prefix_cache or n_blocks <= 0:
             return
         victims: list[bytes] = []
-        for h, bid in self._cache.hash_to_block.items():
+        for h, bid in self._cache.lru_items():
             if self._ref_count[bid] == 1:
                 victims.append(h)
                 if len(victims) >= n_blocks:

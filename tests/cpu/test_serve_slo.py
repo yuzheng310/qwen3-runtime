@@ -7,7 +7,7 @@ import pytest
 
 from qwen3_runtime.config import Config
 from qwen3_runtime.engine.engine import Engine
-from qwen3_runtime.engine.serve import (
+from qwen3_runtime.serving.slo_harness import (
     AdmissionView,
     SessionTurn,
     always_admit,
@@ -43,7 +43,7 @@ def test_poisson_serving_path_skips_cuda_sync(monkeypatch):
     def fake_sync(_engine):
         calls["n"] += 1
 
-    monkeypatch.setattr("qwen3_runtime.engine.serve._sync", fake_sync)
+    monkeypatch.setattr("qwen3_runtime.serving.slo_harness._sync", fake_sync)
     prompts = [[1, 2], [3, 4]]
     arrivals = [0.0, 0.0]
     run_poisson(_engine(), prompts, [2, 2], arrivals, profile=False)
@@ -58,7 +58,7 @@ def test_closed_batch_and_sequential_honor_profile_flag(monkeypatch):
     def fake_sync(_engine):
         calls["n"] += 1
 
-    monkeypatch.setattr("qwen3_runtime.engine.serve._sync", fake_sync)
+    monkeypatch.setattr("qwen3_runtime.serving.slo_harness._sync", fake_sync)
     run_closed_batch(_engine(), [[1, 2]], 2, profile=False)
     run_sequential_requests(_engine(), [([1, 2], 2)], nvtx=False, profile=False)
     assert calls["n"] == 0
@@ -344,7 +344,7 @@ def test_summarize_traces_forced_length_ignores_rejects():
 
 def test_note_new_tokens_records_ttft_and_itl_from_host_clock():
     from bench.vllm_slo import note_new_tokens
-    from qwen3_runtime.engine.serve import RequestTrace
+    from qwen3_runtime.serving.slo_harness import RequestTrace
 
     tr = RequestTrace(request_id=0, arrival_s=10.0, prompt_len=4, max_tokens=3)
     note_new_tokens(tr, [7], 10.5)

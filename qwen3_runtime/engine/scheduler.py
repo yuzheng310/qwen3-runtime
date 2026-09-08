@@ -1,3 +1,7 @@
+"""Unified scheduler: waiting / running / paused, chunked prefill, preemption."""
+
+from __future__ import annotations
+
 from collections import deque
 
 from qwen3_runtime.config import Config
@@ -75,10 +79,6 @@ class Scheduler:
                 self.block_manager.publish_full_blocks(req)
             if token_id is None:
                 continue
-            if req.forced_tokens is not None:
-                produced = len(req.token_ids) - req.num_prompt_tokens
-                if produced < len(req.forced_tokens):
-                    token_id = req.forced_tokens[produced]
             req.append_token(token_id)
             if self._complete_if_done(req):
                 finished.append(req)
@@ -93,6 +93,19 @@ class Scheduler:
     def _complete_if_done(self, req: Request) -> bool:
         n_out = len(req.token_ids) - req.num_prompt_tokens
         token_id = req.token_ids[-1]
+        reason = self._finish_reason(req, n_out, token_id)
+        if reason is None:
+            return False
+        req.finish_reason = reason
+        if req.hold_kv:
+            self.pause(req)
+        else:
+            self._finish(req)
+        return True
+
+    def _finish_reason(self, req: Request, n_out: int, token_id: int) -> str | None:
+        if any(s and s in req.generated_text() for s in req.stop_strings):
+            return "stop_string"
         hit_stop = (not req.ignore_eos) and (
             token_id in req.stop_token_ids
             or (
@@ -100,20 +113,23 @@ class Scheduler:
                 and token_id == self.config.eos_token_id
             )
         )
-        done = hit_stop or n_out >= req.max_tokens
-        if not done:
-            return False
-        if req.hold_kv:
-            self.pause(req)
-        else:
-            self._finish(req)
-        return True
+        if hit_stop and n_out >= req.min_tokens:
+            return "stop"
+        if n_out >= req.max_tokens:
+            return "length"
+        return None
 
     def _maybe_attach_spec_drafts(self, req: Request, token_budget: int) -> None:
         k = self.config.num_speculative_tokens
         if k <= 0 or req.spec_draft_len or not req.is_prefill_complete:
             return
         if req.uncomputed_tokens != 1:
+            return
+        # The verifier reports the emitted token's logprob but not a top-k list
+        # over the vocabulary. Declining to speculate is how that stays a
+        # missing speedup rather than a request that quietly gets less than it
+        # asked for on one of the two decode paths.
+        if req.sampling.top_logprobs > 0:
             return
         drafts, teacher = propose_drafts(
             req, k=k, ngram_min=self.config.ngram_min, ngram_max=self.config.ngram_max
@@ -159,14 +175,19 @@ class Scheduler:
         stop_token_ids: tuple[int, ...] | None = None,
         forced_tokens: list[int] | None = None,
     ) -> None:
-        """Append a new prompt suffix and decode budget. Prefix KV stays."""
+        """Append a new prompt suffix and decode budget. Prefix KV stays.
+
+        The new prompt must be a strict extension of the held sequence.
+        Capacity is checked before any mutation.
+        """
         if req.request_id not in self.paused:
             raise RuntimeError("resume of a request that is not paused")
         if not suffix:
             raise ValueError("resume suffix must be non-empty")
         if max_tokens < 1:
             raise ValueError("max_tokens must be positive")
-        max_len = len(req.token_ids) + len(suffix) + max_tokens
+        held_len = len(req.token_ids)
+        max_len = held_len + len(suffix) + max_tokens
         needed = self.block_manager.blocks_needed_for(max_len)
         if needed > self.block_manager.num_blocks:
             raise RuntimeError(
@@ -185,6 +206,9 @@ class Scheduler:
         if stop_token_ids is not None:
             req.stop_token_ids = tuple(stop_token_ids)
         req.forced_tokens = list(forced_tokens) if forced_tokens is not None else None
+        req.finish_reason = None
+        req.logprobs = []
+        req.top_logprobs = []
         req.status = RequestStatus.WAITING
         self.waiting.append(req)
 

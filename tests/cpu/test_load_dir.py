@@ -4,8 +4,9 @@ import torch
 from safetensors.torch import save_file
 
 from qwen3_runtime.models.qwen3 import Qwen3ForCausalLM
-from qwen3_runtime.utils.loader import dump_hf_state_dict, load_from_directory
+from qwen3_runtime.utils.loader import load_from_directory
 from tests.cpu.test_tiny_qwen3 import tiny_config
+from tests.hf_state_dict import dump_hf_state_dict
 
 
 def _tiny_hf_config() -> dict:

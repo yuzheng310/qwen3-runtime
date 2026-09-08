@@ -2,7 +2,9 @@ import importlib.util
 
 import pytest
 import torch
-import torch.nn.functional as F
+
+from qwen3_runtime.layers.ops import Ops, torch_silu_and_mul
+from qwen3_runtime.models.qwen3 import Qwen3MLP, Qwen3ModelConfig
 
 pytestmark = [
     pytest.mark.skipif(not torch.cuda.is_available(), reason="FlashInfer silu_and_mul needs CUDA"),
@@ -11,8 +13,6 @@ pytestmark = [
 
 
 def test_cuda_mlp_silu_and_mul_matches_chunk_formula():
-    from qwen3_runtime.models.qwen3 import Qwen3MLP, Qwen3ModelConfig
-
     torch.manual_seed(0)
     device = torch.device("cuda")
     cfg = Qwen3ModelConfig(
@@ -24,10 +24,9 @@ def test_cuda_mlp_silu_and_mul_matches_chunk_formula():
         head_dim=4,
         intermediate_size=32,
     )
-    mlp = Qwen3MLP(cfg).to(device=device, dtype=torch.bfloat16)
+    mlp = Qwen3MLP(cfg, ops=Ops.flashinfer()).to(device=device, dtype=torch.bfloat16)
     x = torch.randn(3, 16, device=device, dtype=torch.bfloat16)
-    gu = mlp.gate_up(x)
-    gate, up = gu.chunk(2, dim=-1)
-    want = mlp.down(F.silu(gate) * up)
+    gu = mlp.gate_up_proj(x)
+    want = mlp.down_proj(torch_silu_and_mul(gu))
     got = mlp(x)
     torch.testing.assert_close(got, want, atol=2e-2, rtol=1e-2)

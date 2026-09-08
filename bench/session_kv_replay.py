@@ -12,7 +12,7 @@ from pathlib import Path
 
 from qwen3_runtime.engine.engine import Engine
 from qwen3_runtime.engine.request import RequestStatus
-from qwen3_runtime.engine.serve import RequestTrace, _record_emitted, _step, run_sequential_requests
+from qwen3_runtime.serving.slo_harness import RequestTrace, _record_emitted, _step, run_sequential_requests
 
 
 def group_task_turns(items: list[dict]) -> list[list[dict]]:
@@ -39,6 +39,7 @@ def run_session_kv_on_engine(
     items: list[dict],
     *,
     nvtx: bool = False,
+    hold_kv: bool = True,
 ) -> tuple[list[RequestTrace], dict]:
     for item in items:
         if not item.get("output_ids"):
@@ -62,6 +63,9 @@ def run_session_kv_on_engine(
         "concurrent_sessions": 1,
         "n_resumed_turns": 0,
         "n_full_add_turns": 0,
+        "cached_tokens_sum": 0,
+        "cached_tokens_hit_requests": 0,
+        "apc_cache_blocks": 0,
         "forced_prefix_ok": True,
         "source_forced_length_ok": True,
         "source_forced_length_mismatches": [],
@@ -92,18 +96,8 @@ def run_session_kv_on_engine(
             extra["prompt_tokens"] += len(prompt)
             extra["generated_tokens"] += max_tokens
             more = not last
-            if rid is None:
-                extra["n_full_add_turns"] += 1
-                extra["appended_prompt_tokens"] += len(prompt)
-                rid = engine.add_request(
-                    prompt,
-                    max_tokens=max_tokens,
-                    ignore_eos=True,
-                    hold_kv=more,
-                    forced_tokens=forced,
-                )
-                appended = len(prompt)
-            else:
+            use_session = hold_kv and more
+            if hold_kv and rid is not None:
                 if prompt[: len(held)] != held:
                     extra["forced_prefix_ok"] = False
                     raise RuntimeError(
@@ -118,10 +112,29 @@ def run_session_kv_on_engine(
                     rid,
                     suffix,
                     max_tokens,
-                    hold_kv=more,
+                    hold_kv=use_session,
                     forced_tokens=forced,
                     ignore_eos=True,
                 )
+            else:
+                if rid is not None:
+                    engine.finish_request(rid)
+                    rid = None
+                extra["n_full_add_turns"] += 1
+                extra["appended_prompt_tokens"] += len(prompt)
+                rid = engine.add_request(
+                    prompt,
+                    max_tokens=max_tokens,
+                    ignore_eos=True,
+                    hold_kv=use_session,
+                    forced_tokens=forced,
+                )
+                appended = len(prompt)
+                req0 = engine._requests[rid]
+                cached = int(getattr(req0, "cached_tokens", 0) or 0)
+                extra["cached_tokens_sum"] += cached
+                if cached > 0:
+                    extra["cached_tokens_hit_requests"] += 1
             arrival = time.perf_counter()
             trace = RequestTrace(
                 request_id=rid,
@@ -168,13 +181,18 @@ def run_session_kv_on_engine(
                 )
             traces.append(trace)
             held = list(req.token_ids)
-            if last:
+            if last or not hold_kv:
                 if req.status != RequestStatus.FINISHED:
                     engine.finish_request(rid)
                 rid = None
                 held = []
     extra["block_size"] = engine.config.block_size
     extra["num_kv_blocks"] = engine.config.num_kv_blocks
+    extra["enable_prefix_cache"] = bool(engine.config.enable_prefix_cache)
+    extra["apc_cache_blocks"] = engine.block_manager.cache_blocks
+    extra["hold_kv"] = hold_kv
+    n_add = max(1, extra["n_full_add_turns"])
+    extra["apc_hit_rate"] = extra["cached_tokens_hit_requests"] / n_add
     return traces, extra
 
 
@@ -189,10 +207,15 @@ def replay_ours_session_kv(
     num_speculative_tokens: int = 0,
     ngram_min: int = 2,
     ngram_max: int = 4,
+    enable_prefix_cache: bool = False,
+    hold_kv: bool = True,
+    kv_budget: int | None = None,
 ) -> tuple[list[RequestTrace], float, dict]:
     from qwen3_runtime.engine.factory import build_engine
     from qwen3_runtime.engine.memory import bytes_per_kv_slot
 
+    if enable_prefix_cache:
+        warmup = 0
     engine = build_engine(
         model,
         max_num_seqs=max_num_seqs,
@@ -201,6 +224,8 @@ def replay_ours_session_kv(
         num_speculative_tokens=num_speculative_tokens,
         ngram_min=ngram_min,
         ngram_max=ngram_max,
+        enable_prefix_cache=enable_prefix_cache,
+        kv_budget=kv_budget,
     )
     if warmup and items:
         run_sequential_requests(
@@ -209,9 +234,20 @@ def replay_ours_session_kv(
             ignore_eos=True,
             nvtx=False,
         )
+        engine.invalidate_all_kv()
+    cpu0 = time.process_time()
     t0 = time.perf_counter()
-    traces, extra = run_session_kv_on_engine(engine, items, nvtx=nvtx)
+    traces, extra = run_session_kv_on_engine(engine, items, nvtx=nvtx, hold_kv=hold_kv)
     wall = time.perf_counter() - t0
+    host_cpu = time.process_time() - cpu0
+    extra["host_cpu_s"] = host_cpu
+    extra["host_cpu_per_wall"] = host_cpu / wall if wall else None
+    extra["wall_s"] = wall
+    n_tasks = len({it["task_id"] for it in items})
+    extra["n_tasks"] = n_tasks
+    extra["trajectories_per_s"] = n_tasks / wall if wall else None
+    extra["warmup"] = warmup
+    extra["kv_budget"] = kv_budget
     model_cfg = getattr(getattr(engine, "runner", None), "model", None)
     if model_cfg is not None:
         slot_bytes = bytes_per_kv_slot(model_cfg.cfg, dtype_bytes=2)

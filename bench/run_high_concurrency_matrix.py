@@ -20,7 +20,7 @@ from bench.run_slo_harness import _accounting, _backlog_payload, _sample_output_
 from bench.workloads import SEED, make_prompts, mix_length_prompts, poisson_arrivals
 from qwen3_runtime.engine.factory import PIN, build_engine
 from qwen3_runtime.engine.memory import kv_budget_for_simulated_card
-from qwen3_runtime.engine.serve import run_poisson
+from qwen3_runtime.serving.slo_harness import run_poisson
 from qwen3_runtime.models.qwen3 import Qwen3ModelConfig
 
 REPO = Path(__file__).resolve().parents[1]

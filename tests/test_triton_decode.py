@@ -213,6 +213,8 @@ def test_paged_context_triton_decode_matches_flashinfer():
             backend, q1.clone(), k1.clone(), v1.clone(), batch, 0, n_heads, n_kv, head_dim
         )
 
-    torch.testing.assert_close(_decode("triton").float(), _decode("sdpa").float(), atol=1e-3, rtol=1e-3)
+    # BF16 ULP is 2^-7 = 0.0078125. Triton and the pytorch gather path reduce
+    # in different order, so a 1-ULP gap is expected; 1e-3 was a fp32 leftover.
+    torch.testing.assert_close(_decode("triton").float(), _decode("pytorch").float(), atol=1e-2, rtol=1e-2)
     fi = _decode("flashinfer")
     torch.testing.assert_close(_decode("triton").float(), fi.float(), atol=2e-2, rtol=2e-2)

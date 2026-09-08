@@ -7,6 +7,7 @@ import torch
 from qwen3_runtime.engine.factory import (
     CODESCOUT_PIN,
     PIN,
+    decode_graph_max_kv_for,
     default_cuda_graph,
     eos_token_id_from_pin,
     kv_budget_bytes,
@@ -31,6 +32,7 @@ def test_config_cuda_graph_dataclass_defaults_off():
     from qwen3_runtime.config import Config
 
     assert Config().cuda_graph is False
+    assert Config().num_kv_blocks is None
     assert Config().num_speculative_tokens == 0
     assert Config().ngram_min == 2
     assert Config().ngram_max == 4
@@ -39,10 +41,17 @@ def test_config_cuda_graph_dataclass_defaults_off():
 def test_factory_cuda_graph_default_only_cuda_flashinfer():
     assert default_cuda_graph(device="cuda", backend="flashinfer") is True
     assert default_cuda_graph(device="cuda", backend="triton") is True
-    assert default_cuda_graph(device="cuda", backend="sdpa") is False
-    assert default_cuda_graph(device="cuda", backend="flash_attn") is False
+    assert default_cuda_graph(device="cuda", backend="pytorch") is False
     assert default_cuda_graph(device="cpu", backend="flashinfer") is False
     assert default_cuda_graph(device="cpu", backend="pytorch") is False
+
+
+def test_decode_graph_chunk_cap_only_guards_the_frozen_cta_path():
+    # Split-KV on is the default and needs no cap (EXP-011R).
+    assert decode_graph_max_kv_for(disable_split_kv=False, max_num_batched_tokens=2048) is None
+    # Frozen CTA still needs it: it falls behind eager as KV grows, and capture at
+    # batch 8 / 8K KV faults.
+    assert decode_graph_max_kv_for(disable_split_kv=True, max_num_batched_tokens=2048) == 2048
 
 
 def test_cpu_kv_budget_is_256_mib_not_full_vram_guess():

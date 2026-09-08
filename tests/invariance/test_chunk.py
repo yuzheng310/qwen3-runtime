@@ -2,7 +2,7 @@ import torch
 
 from qwen3_runtime.config import Config
 from qwen3_runtime.engine.engine import Engine
-from qwen3_runtime.engine.model_runner import PytorchEagerRunner
+from qwen3_runtime.reference.eager_runner import PytorchEagerRunner
 from qwen3_runtime.models.qwen3 import Qwen3ForCausalLM, Qwen3ModelConfig
 
 

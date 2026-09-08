@@ -1,10 +1,11 @@
 from qwen3_runtime.config import Config
 from qwen3_runtime.engine.engine import Engine
 from qwen3_runtime.engine.request import RequestStatus
-from qwen3_runtime.engine.model_runner import PagedRunner, PytorchEagerRunner
+from qwen3_runtime.engine.model_runner import PagedRunner
+from qwen3_runtime.reference.eager_runner import PytorchEagerRunner
 from qwen3_runtime.models.qwen3 import Qwen3ForCausalLM, Qwen3ModelConfig
-from qwen3_runtime.sampling import SamplingParams
-from tests.cpu.test_engine import _engine
+from qwen3_runtime.sampling import SamplingParams, record_sampled
+from tests.cpu.test_engine import NullLifecycleRunner, _engine
 import torch
 
 
@@ -24,8 +25,9 @@ def tiny_config() -> Qwen3ModelConfig:
     )
 
 
-class ConstTokenRunner:
+class ConstTokenRunner(NullLifecycleRunner):
     def __init__(self, token: int):
+        super().__init__()
         self.token = token
 
     def run(self, reqs):
@@ -33,6 +35,8 @@ class ConstTokenRunner:
         for req in reqs:
             done = req.num_computed_tokens + req.num_scheduled_tokens >= len(req.token_ids)
             out.append(self.token if done else None)
+            if done:
+                record_sampled(req, -0.5)  # every emitted token owes a logprob
         return out
 
 
@@ -145,6 +149,60 @@ def test_two_sessions_do_not_leak_kv_or_tokens():
     assert engine._requests[b].token_ids[-2:] == [41, 42]
     engine.finish_request(b)
     assert engine.block_manager.num_free_blocks == engine.block_manager.num_blocks
+
+
+def test_identical_turn0_prompts_have_disjoint_kv_then_diverge():
+    """GRPO group members share a byte-identical turn-0 prompt, then diverge.
+
+    Token streams and KV block tables must stay disjoint. This is the failure
+    mode of searching all paused sessions for a prefix match.
+    """
+    engine = _engine()
+    prompt = [1, 2, 3, 4]
+    a = engine.add_request(prompt, max_tokens=2, hold_kv=True, forced_tokens=[11, 12])
+    b = engine.add_request(prompt, max_tokens=2, hold_kv=True, forced_tokens=[21, 22])
+    while (
+        engine._requests[a].status != RequestStatus.PAUSED
+        or engine._requests[b].status != RequestStatus.PAUSED
+    ):
+        engine.step()
+    assert engine._requests[a].token_ids[-2:] == [11, 12]
+    assert engine._requests[b].token_ids[-2:] == [21, 22]
+    assert set(engine._requests[a].block_table).isdisjoint(set(engine._requests[b].block_table))
+    engine.resume_request(a, [13], 1, hold_kv=True, forced_tokens=[14])
+    engine.resume_request(b, [23], 1, hold_kv=True, forced_tokens=[24])
+    while (
+        engine._requests[a].status != RequestStatus.PAUSED
+        or engine._requests[b].status != RequestStatus.PAUSED
+    ):
+        engine.step()
+    assert engine._requests[a].token_ids[-1] == 14
+    assert engine._requests[b].token_ids[-1] == 24
+    assert set(engine._requests[a].block_table).isdisjoint(set(engine._requests[b].block_table))
+    assert engine._requests[a].token_ids != engine._requests[b].token_ids
+
+
+def test_apc_on_identical_turn0_shares_prefix_after_first_pauses():
+    """Content-addressed sharing is allowed; session identity is not.
+
+    Sequential GRPO members: the second attach hits the first's published
+    full blocks. Token streams and suffix blocks stay private. Concurrent
+    cold starts may miss the cache; that is measured in 7.2, not a bug.
+    """
+    engine = _engine(block_size=4, num_blocks=64, enable_prefix_cache=True)
+    prompt = list(range(1, 13))
+    a = engine.add_request(prompt, max_tokens=2, hold_kv=True, forced_tokens=[11, 12])
+    engine.drain_request(a)
+    b = engine.add_request(prompt, max_tokens=2, hold_kv=True, forced_tokens=[21, 22])
+    assert engine._requests[b].cached_tokens == 8
+    assert engine._requests[b].block_table[:2] == engine._requests[a].block_table[:2]
+    engine.drain_request(b)
+    assert engine._requests[a].token_ids[-2:] == [11, 12]
+    assert engine._requests[b].token_ids[-2:] == [21, 22]
+    assert engine._requests[a].token_ids != engine._requests[b].token_ids
+    assert set(engine._requests[a].block_table[2:]).isdisjoint(
+        set(engine._requests[b].block_table[2:])
+    )
 
 
 def test_paused_session_consumes_no_decode_slot_while_peer_decodes():

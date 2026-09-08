@@ -1,12 +1,56 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+
 import pytest
 
 from qwen3_runtime.config import Config
+from qwen3_runtime.engine.block_manager import BlockManager
 from qwen3_runtime.engine.engine import Engine
 from qwen3_runtime.engine.request import Request
+from qwen3_runtime.engine.runner import ModelRunner
+from qwen3_runtime.sampling import record_sampled
 
 
-class FakeModelRunner:
-    """Token ids depend only on the request, not on batch mates."""
+class NullLifecycleRunner(ModelRunner):
+    """Test runner with the ABC lifecycle methods as no-ops."""
+
+    def __init__(self) -> None:
+        self.model = None
+        self.pool = None
+
+    def bind(self, block_manager: BlockManager) -> None:
+        del block_manager
+
+    def run(self, reqs: Sequence[Request]) -> list[int | None]:
+        raise NotImplementedError
+
+    def run_logits(self, reqs: Sequence[Request]):
+        raise RuntimeError("speculative decoding needs a runner with run_logits")
+
+    def release_kv_pool(self) -> None:
+        return
+
+    def offload_weights(self, *, keep_a_host_copy: bool = False) -> None:
+        del keep_a_host_copy
+
+    def reload_weights(self) -> None:
+        return
+
+    def rebuild_kv_pool(self) -> None:
+        return
+
+
+class FakeModelRunner(NullLifecycleRunner):
+    """Token ids depend only on the request, not on batch mates.
+
+    Every returned token is scored, because that is the ``ModelRunner.run``
+    contract: the engine will not emit a token this runner cannot account for.
+    The value is a stand-in -- there is no distribution behind these ids -- but
+    it has to be there, and there has to be exactly one per token.
+    """
+
+    FAKE_LOGPROB = -0.5
 
     def run(self, reqs: list[Request]) -> list[int | None]:
         out: list[int | None] = []
@@ -17,16 +61,29 @@ class FakeModelRunner:
             if not will_complete_prefill:
                 out.append(None)
                 continue
+            forced = req.next_forced_token()
+            if forced is not None:
+                out.append(forced)
+                record_sampled(req, self.FAKE_LOGPROB)
+                continue
             out.append((req.token_ids[0] + req.num_computed_tokens) % 97 + 1)
+            record_sampled(req, self.FAKE_LOGPROB)
         return out
 
 
-def _engine(token_budget=2048, max_seqs=8, num_blocks=128, block_size=16) -> Engine:
+def _engine(
+    token_budget=2048,
+    max_seqs=8,
+    num_blocks=128,
+    block_size=16,
+    enable_prefix_cache=False,
+) -> Engine:
     cfg = Config(
         max_num_batched_tokens=token_budget,
         max_num_seqs=max_seqs,
         num_kv_blocks=num_blocks,
         block_size=block_size,
+        enable_prefix_cache=enable_prefix_cache,
     )
     return Engine(cfg, FakeModelRunner())
 

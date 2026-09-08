@@ -3,7 +3,8 @@ import importlib.util
 import pytest
 import torch
 
-from qwen3_runtime.layers.rope import RotaryEmbedding, apply_qwen3_rope, apply_rope_neox
+from qwen3_runtime.layers.ops import Ops
+from qwen3_runtime.layers.rope import RotaryEmbedding, apply_rope_neox
 
 pytestmark = [
     pytest.mark.skipif(not torch.cuda.is_available(), reason="FlashInfer RoPE needs CUDA"),
@@ -21,6 +22,6 @@ def test_cuda_qwen3_rope_matches_neox_reference():
     cos, sin = rope(pos)
     q_ref = apply_rope_neox(q, cos, sin)
     k_ref = apply_rope_neox(k, cos, sin)
-    q_got, k_got = apply_qwen3_rope(q, k, pos, rope)
+    q_got, k_got = Ops.flashinfer().apply_rope(q.clone(), k.clone(), pos, rope)
     torch.testing.assert_close(q_got, q_ref, atol=5e-3, rtol=1e-2)
     torch.testing.assert_close(k_got, k_ref, atol=5e-3, rtol=1e-2)

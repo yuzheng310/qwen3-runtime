@@ -9,8 +9,8 @@ import torch
 
 from qwen3_runtime.config import Config
 from qwen3_runtime.engine.engine import Engine
-from qwen3_runtime.engine.model_runner import PagedRunner, SplitPagedRunner
-from qwen3_runtime.engine.serve import RequestTrace, run_closed_batch, run_poisson
+from qwen3_runtime.engine.model_runner import PagedRunner
+from qwen3_runtime.serving.slo_harness import RequestTrace, run_closed_batch, run_poisson
 from qwen3_runtime.models.qwen3 import Qwen3ForCausalLM
 
 from bench.workloads import Workload, poisson_arrivals
@@ -20,7 +20,7 @@ def tiny_engine(model: Qwen3ForCausalLM, workload: Workload, *, split: bool) -> 
     n_slots = workload.n_requests * (workload.prompt_tokens + workload.output_tokens)
     block_size = 4
     num_blocks = max(32, (n_slots + block_size - 1) // block_size + 8)
-    runner = SplitPagedRunner(model) if split else PagedRunner(model)
+    runner = PagedRunner(model, split=bool(split))
     return Engine(
         Config(
             block_size=block_size,

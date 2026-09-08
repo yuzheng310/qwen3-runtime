@@ -15,7 +15,7 @@
   <a href="LICENSE"><img alt="许可证" src="https://img.shields.io/badge/license-Apache--2.0-4C8BF5?style=flat-square"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"></a>
   <a href="docs/pins/Qwen3-4B/config.json"><img alt="模型" src="https://img.shields.io/badge/model-Qwen3-7C3AED?style=flat-square"></a>
-  <a href="TEST_RESULTS.md"><img alt="测试" src="https://img.shields.io/badge/tests-175%20passed-2EA44F?style=flat-square"></a>
+  <a href="TEST_RESULTS.md"><img alt="测试" src="https://img.shields.io/badge/tests-327%20passed-2EA44F?style=flat-square"></a>
   <a href="RESULTS.md"><img alt="vLLM parity" src="https://img.shields.io/badge/vLLM%20parity-94.7--97.7%25-F59E0B?style=flat-square"></a>
 </p>
 
@@ -69,7 +69,7 @@ benchmark、协议适配器与可替换 kernel）。Scheduler、Paged KV、模�
     <td align="center"><strong>94.70–97.70%</strong><br><sub>vLLM throughput</sub></td>
     <td align="center"><strong>70.6%</strong><br><sub>prompt tokens</sub></td>
     <td align="center"><strong>1,901 / 1,901</strong><br><sub>相邻 turns</sub></td>
-    <td align="center"><strong>175 passed</strong><br><sub>16 项资源跳过</sub></td>
+    <td align="center"><strong>327 passed</strong><br><sub>18 项资源跳过</sub></td>
   </tr>
 </table>
 

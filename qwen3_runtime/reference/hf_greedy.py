@@ -1,4 +1,5 @@
 """Greedy token-id comparison. HuggingFace generate() defaults are NOT used."""
+from __future__ import annotations
 
 from collections.abc import Sequence
 
@@ -7,7 +8,7 @@ import torch
 from qwen3_runtime.engine.engine import Engine
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def hf_greedy_tokens(model, prompt: Sequence[int], max_tokens: int) -> list[int]:
     device = next(model.parameters()).device
     ids = torch.tensor([list(prompt)], dtype=torch.long, device=device)

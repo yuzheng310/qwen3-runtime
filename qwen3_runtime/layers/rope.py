@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import torch
 from torch import nn
 
@@ -31,19 +33,6 @@ def apply_qwen3_rope(
     positions: torch.Tensor,
     rope: RotaryEmbedding,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """NeoX RoPE. CUDA uses FlashInfer when installed; CPU keeps the explicit formula."""
-    if q.is_cuda:
-        try:
-            from flashinfer import apply_rope_pos_ids
-        except ImportError:
-            pass
-        else:
-            return apply_rope_pos_ids(
-                q,
-                k,
-                positions,
-                interleave=False,
-                rope_theta=rope.theta,
-            )
+    """NeoX RoPE torch reference. Production calls ``Ops.apply_rope`` instead."""
     cos, sin = rope(positions)
     return apply_rope_neox(q, cos, sin), apply_rope_neox(k, cos, sin)

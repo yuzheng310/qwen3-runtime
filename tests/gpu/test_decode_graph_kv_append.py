@@ -50,7 +50,7 @@ def _free_engine(engine) -> None:
         runner._decode_graphs.clear()
         runner.pool = None
     del engine
-    paged_mod._FI_STATE.clear()
+    paged_mod.FLASHINFER.reset()
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()

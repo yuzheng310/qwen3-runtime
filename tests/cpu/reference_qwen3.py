@@ -58,23 +58,23 @@ class ReferenceQwen3(nn.Module):
         cfg = self.cfg
         q = cfg.num_attention_heads * cfg.head_dim
         kv = cfg.num_key_value_heads * cfg.head_dim
-        self.embed.weight.data.copy_(model.embed.weight)
-        self.final_norm.weight.data.copy_(model.final_norm.weight)
+        self.embed.weight.data.copy_(model.embed_tokens.weight)
+        self.final_norm.weight.data.copy_(model.norm.weight)
         for i, layer in enumerate(model.layers):
-            qkv = layer.attn.qkv.weight
+            qkv = layer.attn.qkv_proj.weight
             self.q[i].weight.data.copy_(qkv[:q])
             self.k[i].weight.data.copy_(qkv[q : q + kv])
             self.v[i].weight.data.copy_(qkv[q + kv :])
-            self.o[i].weight.data.copy_(layer.attn.o.weight)
+            self.o[i].weight.data.copy_(layer.attn.o_proj.weight)
             self.q_norm[i].weight.data.copy_(layer.attn.q_norm.weight)
             self.k_norm[i].weight.data.copy_(layer.attn.k_norm.weight)
-            self.attn_norm[i].weight.data.copy_(layer.input_norm.weight)
-            self.mlp_norm[i].weight.data.copy_(layer.post_norm.weight)
-            gu = layer.mlp.gate_up.weight
+            self.attn_norm[i].weight.data.copy_(layer.input_layernorm.weight)
+            self.mlp_norm[i].weight.data.copy_(layer.post_attention_layernorm.weight)
+            gu = layer.mlp.gate_up_proj.weight
             mid = cfg.intermediate_size
             self.gate[i].weight.data.copy_(gu[:mid])
             self.up[i].weight.data.copy_(gu[mid:])
-            self.down[i].weight.data.copy_(layer.mlp.down.weight)
+            self.down[i].weight.data.copy_(layer.mlp.down_proj.weight)
 
     def forward(self, input_ids: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
         cfg = self.cfg

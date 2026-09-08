@@ -4,12 +4,12 @@ import pytest
 import torch
 
 from qwen3_runtime.config import Config
-from qwen3_runtime.correctness.hf_greedy import hf_greedy_tokens, runtime_greedy_tokens
+from qwen3_runtime.reference.hf_greedy import hf_greedy_tokens, runtime_greedy_tokens
 from qwen3_runtime.engine.engine import Engine
 from qwen3_runtime.engine.model_runner import PagedRunner
 from qwen3_runtime.models.qwen3 import Qwen3ForCausalLM
-from qwen3_runtime.utils.loader import dump_hf_state_dict
 from tests.cpu.test_tiny_qwen3 import tiny_config
+from tests.hf_state_dict import dump_hf_state_dict
 
 
 def test_paged_runtime_greedy_matches_transformers_qwen3():

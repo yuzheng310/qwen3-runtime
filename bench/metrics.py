@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from statistics import mean, median, pstdev
 
-from qwen3_runtime.engine.serve import RequestTrace
+from qwen3_runtime.serving.slo_harness import RequestTrace
 
 
 def _mmm(xs: list[float]) -> dict:

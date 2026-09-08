@@ -44,7 +44,7 @@ def test_qwen3_4b_paged_greedy_matches_hf_token_ids():
     transformers = pytest.importorskip("transformers")
 
     from qwen3_runtime.config import Config
-    from qwen3_runtime.correctness.hf_greedy import hf_greedy_tokens, runtime_greedy_tokens
+    from qwen3_runtime.reference.hf_greedy import hf_greedy_tokens, runtime_greedy_tokens
     from qwen3_runtime.engine.engine import Engine
     from qwen3_runtime.engine.factory import select_attention_backend
     from qwen3_runtime.engine.model_runner import PagedRunner

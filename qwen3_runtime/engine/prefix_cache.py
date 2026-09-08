@@ -51,6 +51,10 @@ class PrefixCache:
         self.hash_to_block[h] = block_id
         return True
 
+    def lru_items(self):
+        """Oldest cached (hash, block_id) first."""
+        return iter(self.hash_to_block.items())
+
     def pop_oldest(self) -> tuple[bytes, int] | None:
         if not self.hash_to_block:
             return None
@@ -58,3 +62,6 @@ class PrefixCache:
 
     def drop(self, h: bytes) -> int | None:
         return self.hash_to_block.pop(h, None)
+
+    def clear(self) -> None:
+        self.hash_to_block.clear()

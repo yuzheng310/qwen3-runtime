@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from qwen3_runtime.engine.serve import RequestTrace, _record_token
+from qwen3_runtime.serving.slo_harness import RequestTrace, _record_token
 
 
 def note_new_tokens(trace: RequestTrace, token_ids: list[int], now: float) -> None:

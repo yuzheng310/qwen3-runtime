@@ -4,7 +4,7 @@ from pathlib import Path
 from qwen3_runtime.config import Config
 from qwen3_runtime.engine.engine import Engine
 from qwen3_runtime.engine.factory import PIN, CODESCOUT_PIN, resolve_pin
-from qwen3_runtime.engine.serve import run_sequential_requests
+from qwen3_runtime.serving.slo_harness import run_sequential_requests
 from qwen3_runtime.models.qwen3 import Qwen3ModelConfig
 from qwen3_runtime.utils.loader import PIN_KEYS
 from tests.cpu.test_engine import FakeModelRunner

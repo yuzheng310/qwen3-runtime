@@ -12,7 +12,7 @@ pytestmark = [
 ]
 
 
-def test_flashinfer_paged_matches_sdpa_prefill_and_decode():
+def test_flashinfer_paged_matches_pytorch_prefill_and_decode():
     """head_dim=128 matches Qwen3; tiny head_dim is not a FlashInfer kernel shape."""
     torch.manual_seed(3)
     device = torch.device("cuda")
@@ -41,9 +41,9 @@ def test_flashinfer_paged_matches_sdpa_prefill_and_decode():
         )
         return paged_context(backend, q.clone(), k.clone(), v.clone(), batch, 0, n_heads, n_kv, head_dim)
 
-    sdpa = _run("sdpa")
+    pytorch = _run("pytorch")
     fi = _run("flashinfer")
-    torch.testing.assert_close(fi.float(), sdpa.float(), atol=2e-2, rtol=2e-2)
+    torch.testing.assert_close(fi.float(), pytorch.float(), atol=2e-2, rtol=2e-2)
 
     q1 = torch.randn(1, n_heads, head_dim, device=device, dtype=torch.bfloat16)
     k1 = torch.randn(1, n_kv, head_dim, device=device, dtype=torch.bfloat16)
@@ -66,4 +66,4 @@ def test_flashinfer_paged_matches_sdpa_prefill_and_decode():
         )
         return paged_context(backend, q1.clone(), k1.clone(), v1.clone(), batch, 0, n_heads, n_kv, head_dim)
 
-    torch.testing.assert_close(_decode("flashinfer").float(), _decode("sdpa").float(), atol=2e-2, rtol=2e-2)
+    torch.testing.assert_close(_decode("flashinfer").float(), _decode("pytorch").float(), atol=2e-2, rtol=2e-2)

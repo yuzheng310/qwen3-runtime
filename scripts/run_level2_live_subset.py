@@ -10,8 +10,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import shutil
+import subprocess
 import sys
+import threading
 import time
 import traceback
 import urllib.request
@@ -34,6 +37,19 @@ def configure_github_mirror() -> None:
     os.environ["GIT_CONFIG_COUNT"] = "1"
     os.environ["GIT_CONFIG_KEY_0"] = f"url.{mirror.rstrip('/')}/.insteadOf"
     os.environ["GIT_CONFIG_VALUE_0"] = "https://github.com/"
+
+
+def session_base_url(base_url: str, session_key: str | None) -> str:
+    if not session_key:
+        return base_url
+    root = base_url.rstrip("/")
+    return f"{root}/s/{session_key}/"
+
+
+def session_reset_url(base_url: str, session_key: str | None) -> str:
+    if session_key:
+        return session_base_url(base_url, session_key).rstrip("/") + "/reset"
+    return base_url.rstrip("/") + "/reset"
 
 
 def clone_instance_cached(repo: str, commit: str, tid: str, cache_root: Path) -> tuple[bool, Path | None]:
@@ -62,7 +78,7 @@ def clone_instance_cached(repo: str, commit: str, tid: str, cache_root: Path) ->
         try:
             print(f"  archive {archive}", flush=True)
             subprocess.run(
-                ["curl", "-kL", "--max-time", "120", "-o", str(tmp), archive],
+                ["curl", "-kL", "--max-time", "300", "-o", str(tmp), archive],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -121,7 +137,7 @@ def clone_instance_cached(repo: str, commit: str, tid: str, cache_root: Path) ->
             check=True,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=300,
         )
         subprocess.run(
             ["git", "-C", str(instance_path), "checkout", "--force", "FETCH_HEAD"],
@@ -266,6 +282,73 @@ def load_locagent_rows(task_ids: list[str]) -> list[dict]:
     return [by_id[t] for t in task_ids]
 
 
+def extract_tool_turns(messages: list[dict]) -> list[dict]:
+    """Per-turn tool command and observation size. Does not change the agent loop.
+
+    Used by the A0 control: if tokens diverge, this log shows whether the tool
+    command/output moved first. Parsing is read-only over Conversation events.
+    """
+    turns: list[dict] = []
+    pending: dict | None = None
+    for event in messages:
+        if not isinstance(event, dict):
+            continue
+        kind = str(event.get("kind") or event.get("type") or "")
+        tool_name = event.get("tool_name")
+        action = event.get("action") if isinstance(event.get("action"), dict) else {}
+        if tool_name is None:
+            tool_name = action.get("name") or action.get("tool_name")
+        command = action.get("command")
+        if command is None and isinstance(action.get("arguments"), dict):
+            command = action["arguments"].get("command")
+        if command is None and isinstance(event.get("args"), dict):
+            command = event["args"].get("command")
+        is_action = ("Action" in kind) or (command is not None and "Observation" not in kind)
+        is_obs = "Observation" in kind or kind.endswith("ObservationEvent")
+        if is_action and (command is not None or tool_name):
+            pending = {
+                "turn": len(turns),
+                "kind": kind,
+                "tool_name": tool_name,
+                "command": command if isinstance(command, str) else (json.dumps(command) if command is not None else None),
+                "output": None,
+                "output_bytes": 0,
+            }
+            continue
+        if is_obs or (pending is not None and event.get("content") is not None and "Action" not in kind):
+            output = event.get("content")
+            if output is None:
+                obs = event.get("observation")
+                if isinstance(obs, dict):
+                    output = obs.get("content") or obs.get("text") or obs.get("output")
+                elif isinstance(obs, str):
+                    output = obs
+            if isinstance(output, dict):
+                output = output.get("content") or output.get("text") or json.dumps(output)
+            if output is None:
+                extras = event.get("extras") if isinstance(event.get("extras"), dict) else {}
+                output = extras.get("output") or extras.get("content")
+            text = output if isinstance(output, str) else ("" if output is None else str(output))
+            n_bytes = len(text.encode("utf-8"))
+            if pending is None:
+                pending = {
+                    "turn": len(turns),
+                    "kind": kind,
+                    "tool_name": tool_name,
+                    "command": None,
+                    "output": None,
+                    "output_bytes": n_bytes,
+                }
+            pending["output"] = text[:2000]
+            pending["output_bytes"] = n_bytes
+            pending["observation_kind"] = kind
+            turns.append(pending)
+            pending = None
+    if pending is not None:
+        turns.append(pending)
+    return turns
+
+
 def get_structured_locations(events) -> list[dict] | None:
     from openhands.sdk.event import ActionEvent
     from src.tools.localization_finish import LocalizationFinishAction
@@ -291,11 +374,31 @@ def get_structured_locations(events) -> list[dict] | None:
     return locations
 
 
-def run_one(instance: dict, *, base_url: str, model_name: str, max_turns: int, work_root: Path) -> dict:
+def run_one(
+    instance: dict,
+    *,
+    base_url: str,
+    model_name: str,
+    max_turns: int,
+    work_root: Path,
+    session_key: str | None = None,
+    temperature: float = 0.6,
+    request_logprobs: bool = False,
+) -> dict:
     from openhands.sdk import LLM, Conversation
     from openhands.sdk.conversation.response_utils import get_agent_final_response
     from openhands.sdk.tool import Tool, register_tool
     from openhands.tools.terminal import TerminalTool
+    if os.environ.get("STEP51_PIN_RECORD") or os.environ.get("STEP51_PIN_REPLAY"):
+        import importlib.util
+
+        helper = Path(__file__).resolve().parent / "step51_pin_terminal.py"
+        spec = importlib.util.spec_from_file_location("step51_pin_terminal", helper)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"cannot load {helper}")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.install_pin()
     from src.agent.agent import CustomAgent
     from src.prompts.prompt_builder import get_instruction
     from src.rewards import get_reward_function
@@ -307,10 +410,11 @@ def run_one(instance: dict, *, base_url: str, model_name: str, max_turns: int, w
     repo = instance.get("repo") or instance.get("repo_id")
     commit = instance.get("base_commit")
     tid = instance["instance_id"]
+    cache_tid = str(instance.get("_cache_tid") or tid)
     ok, working_dir = False, None
     last_err = None
     for attempt in range(3):
-        ok, working_dir = clone_instance_cached(str(repo), str(commit), tid, work_root / "git-cache")
+        ok, working_dir = clone_instance_cached(str(repo), str(commit), cache_tid, work_root / "git-cache")
         if ok and working_dir is not None:
             break
         last_err = f"clone_failed_attempt_{attempt+1}"
@@ -323,19 +427,24 @@ def run_one(instance: dict, *, base_url: str, model_name: str, max_turns: int, w
             "wall_s": 0.0,
         }
     register_tool(LocalizationFinishTool.name, LocalizationFinishTool)
+    extra_body = {
+        "return_token_ids": True,
+        "include_stop_str_in_output": False,
+        "chat_template_kwargs": {
+            "add_generation_prompt": True,
+            "enable_thinking": False,
+        },
+    }
+    if request_logprobs:
+        extra_body["logprobs"] = True
+        extra_body["top_logprobs"] = 20
+        extra_body["return_tokens_as_token_ids"] = True
     llm_kwargs = dict(
         model="openai/" + model_name,
-        base_url=base_url,
+        base_url=session_base_url(base_url, session_key),
         api_key="sk-xxx",
-        temperature=0.6,
-        litellm_extra_body={
-            "return_token_ids": True,
-            "include_stop_str_in_output": False,
-            "chat_template_kwargs": {
-                "add_generation_prompt": True,
-                "enable_thinking": False,
-            },
-        },
+        temperature=float(temperature),
+        litellm_extra_body=extra_body,
     )
     try:
         llm = LLM(usage_id="agent", **llm_kwargs)
@@ -400,6 +509,11 @@ def run_one(instance: dict, *, base_url: str, model_name: str, max_turns: int, w
             )
         except Exception:
             pass
+        if session_key:
+            try:
+                _http_json(session_reset_url(base_url, session_key), {}, method="POST")
+            except Exception:
+                pass
     reward_val = None
     reward_detail = None
     try:
@@ -414,6 +528,7 @@ def run_one(instance: dict, *, base_url: str, model_name: str, max_turns: int, w
         n_turns = sum(1 for m in messages if m.get("source") == "agent" and m.get("kind") == "MessageEvent")
     n_terminal = sum(1 for m in messages if m.get("tool_name") == "terminal")
     n_finish = sum(1 for m in messages if m.get("tool_name") == "localization_finish")
+    tool_turns = extract_tool_turns(messages)
     return {
         "task_id": tid,
         "ok": error is None,
@@ -426,11 +541,15 @@ def run_one(instance: dict, *, base_url: str, model_name: str, max_turns: int, w
         "n_turns_est": n_turns,
         "n_terminal_actions": n_terminal,
         "n_localization_finish": n_finish,
+        "tool_turns": tool_turns,
+        "n_tool_turns": len(tool_turns),
         "structured_locations": structured,
         "reward": reward_val,
         "reward_detail": reward_detail,
         "final_message_head": (final_message or "")[:500],
         "working_dir": str(working_dir),
+        "session_key": session_key,
+        "cache_tid": cache_tid,
     }
 
 
@@ -445,8 +564,33 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://127.0.0.1:8080/v1/")
     parser.add_argument("--model-name", default="CodeScout-4B")
     parser.add_argument("--max-turns", type=int, default=6)
-    parser.add_argument("--work-root", type=Path, default=Path("/root/autodl-tmp/codescout-live"))
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.6,
+        help="LLM sampling temperature. §5.0 uses 0.0.",
+    )
+    parser.add_argument(
+        "--request-logprobs",
+        action="store_true",
+        help="Ask the OpenAI server for logprobs + token_id placeholders (vLLM §5.0 capture).",
+    )
+    parser.add_argument("--work-root", type=Path, default=Path("codescout-live"))
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--concurrency", type=int, default=1, help="N workers, each with /v1/s/{key}/")
+    parser.add_argument(
+        "--session-urls",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="N>1 uses /v1/s/{worker}/chat/completions. Disable for vLLM, which has no session paths.",
+    )
+    parser.add_argument(
+        "--group-size",
+        type=int,
+        default=1,
+        help="Replicate each instance G times (GRPO shape). Each replica gets its own checkout.",
+    )
+    parser.add_argument("--prewarm-only", action="store_true", help="Clone every repo then exit. Untimed.")
     args = parser.parse_args()
 
     global PROMPTS
@@ -458,29 +602,35 @@ def main() -> None:
 
     task_ids = args.task_ids or load_task_ids(args.subset, args.n_tasks, args.prefer_small)
     instances = load_locagent_rows(task_ids)
+    if args.group_size < 1 or args.concurrency < 1:
+        raise SystemExit("concurrency and group-size must be >= 1")
+    if args.group_size > 1:
+        expanded = []
+        for inst in instances:
+            for g in range(args.group_size):
+                row = dict(inst)
+                row["_replica"] = g
+                row["_cache_tid"] = f"{inst['instance_id']}__g{g}"
+                expanded.append(row)
+        instances = expanded
     args.work_root.mkdir(parents=True, exist_ok=True)
-    t_all = time.perf_counter()
-    rows = []
-    for instance in instances:
-        tid = instance["instance_id"]
-        print(f"=== live {tid} ===", flush=True)
-        try:
-            row = run_one(
-                instance,
-                base_url=args.base_url,
-                model_name=args.model_name,
-                max_turns=args.max_turns,
-                work_root=args.work_root,
-            )
-        except Exception as exc:
-            row = {
-                "task_id": tid,
-                "ok": False,
-                "error": f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-800:]}",
-                "wall_s": 0.0,
-            }
-        print(json.dumps({k: row[k] for k in ("task_id", "ok", "error", "wall_s", "reward") if k in row}), flush=True)
-        rows.append(row)
+
+    if args.prewarm_only:
+        ok = 0
+        for inst in instances:
+            tid = inst.get("_cache_tid") or inst["instance_id"]
+            repo = inst.get("repo") or inst.get("repo_id")
+            commit = inst.get("base_commit")
+            print(f"prewarm {tid}", flush=True)
+            success, path = clone_instance_cached(str(repo), str(commit), str(tid), args.work_root / "git-cache")
+            print(" ", success, path, flush=True)
+            ok += int(bool(success))
+        print(f"prewarm_ok {ok}/{len(instances)}", flush=True)
+        if ok < len(instances):
+            raise SystemExit(f"prewarm incomplete {ok}/{len(instances)}")
+        return
+
+    def _write_partial(rows: list) -> None:
         partial = {
             "schema_version": 1,
             "mode": "live_codescout_subset",
@@ -492,21 +642,104 @@ def main() -> None:
         }
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(partial, indent=2, default=str) + "\n")
-        try:
-            _http_json(args.base_url.rstrip("/") + "/reset", {}, method="POST")
-        except Exception:
+
+    t_all = time.perf_counter()
+    rows: list = []
+    if args.concurrency == 1:
+        for instance in instances:
+            tid = instance["instance_id"]
+            print(f"=== live {tid} ===", flush=True)
             try:
-                _http_json(args.base_url.rstrip("/") + "/reset")
+                row = run_one(
+                    instance,
+                    base_url=args.base_url,
+                    model_name=args.model_name,
+                    max_turns=args.max_turns,
+                    work_root=args.work_root,
+                    temperature=args.temperature,
+                    request_logprobs=args.request_logprobs,
+                )
+            except Exception as exc:
+                row = {
+                    "task_id": tid,
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-800:]}",
+                    "wall_s": 0.0,
+                }
+            print(json.dumps({k: row[k] for k in ("task_id", "ok", "error", "wall_s", "reward") if k in row}), flush=True)
+            rows.append(row)
+            _write_partial(rows)
+            try:
+                _http_json(args.base_url.rstrip("/") + "/reset", {}, method="POST")
             except Exception:
-                pass
+                try:
+                    _http_json(args.base_url.rstrip("/") + "/reset")
+                except Exception:
+                    pass
+    else:
+        work_q: queue.Queue = queue.Queue()
+        for inst in instances:
+            work_q.put(inst)
+        rows_lock = threading.Lock()
+
+        def worker(wid: int) -> None:
+            key = f"w{wid}"
+            while True:
+                try:
+                    instance = work_q.get_nowait()
+                except queue.Empty:
+                    return
+                tid = instance["instance_id"]
+                print(f"=== live {tid} session={key} ===", flush=True)
+                try:
+                    row = run_one(
+                        instance,
+                        base_url=args.base_url,
+                        model_name=args.model_name,
+                        max_turns=args.max_turns,
+                        work_root=args.work_root,
+                        session_key=key if args.session_urls else None,
+                        temperature=args.temperature,
+                        request_logprobs=args.request_logprobs,
+                    )
+                except Exception as exc:
+                    row = {
+                        "task_id": tid,
+                        "ok": False,
+                        "error": f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-800:]}",
+                        "wall_s": 0.0,
+                        "session_key": key,
+                    }
+                print(json.dumps({k: row[k] for k in ("task_id", "ok", "error", "wall_s", "reward", "session_key") if k in row}), flush=True)
+                with rows_lock:
+                    rows.append(row)
+                    _write_partial(rows)
+                work_q.task_done()
+
+        threads = [threading.Thread(target=worker, args=(i,), daemon=True) for i in range(args.concurrency)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+
     wall = time.perf_counter() - t_all
     stats = {}
     try:
         stats = _http_json(args.base_url.rstrip("/") + "/stats")
     except Exception as exc:
         stats = {"error": str(exc)}
+    source_commit = os.environ.get("SOURCE_COMMIT", "uncommitted")
+    try:
+        source_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, stderr=subprocess.DEVNULL
+        ).decode().strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
     inference_s = float(stats.get("drain_s") or 0.0)
     n_ok = sum(1 for r in rows if r.get("ok"))
+    n_finish = sum(1 for r in rows if (r.get("n_localization_finish") or 0) > 0)
+    conv = sum(float(r.get("wall_s") or 0) for r in rows)
+    rewards = [float(r["reward"]) for r in rows if r.get("reward") is not None]
     payload = {
         "schema_version": 1,
         "mode": "live_codescout_subset",
@@ -514,24 +747,32 @@ def main() -> None:
         "n_tasks": len(rows),
         "completed_ok": n_ok,
         "task_ids": task_ids,
+        "concurrency": args.concurrency,
+        "group_size": args.group_size,
+        "session_urls": args.session_urls,
         "max_turns": args.max_turns,
-        "temperature": 0.6,
+        "temperature": args.temperature,
         "thinking": False,
         "model_name": args.model_name,
         "base_url": args.base_url,
         "codescout_path": str(codescout),
+        "source_commit": source_commit,
         "wall_s": wall,
+        "conversation_wall_sum_s": conv,
+        "conversation_s_per_task": (conv / len(rows)) if rows else None,
+        "n_localization_finish_trajectories": n_finish,
+        "finish_rate": (n_finish / len(rows)) if rows else None,
         "inference_drain_s": inference_s,
         "tool_or_env_s": max(0.0, wall - inference_s) if inference_s else None,
         "trajectories_per_hour": (3600.0 * n_ok / wall) if wall and n_ok else 0.0,
         "n_terminal_actions_total": sum(int(r.get("n_terminal_actions") or 0) for r in rows),
         "n_localization_finish_total": sum(int(r.get("n_localization_finish") or 0) for r in rows),
-        "mean_reward": (sum(float(r["reward"]) for r in rows if r.get("reward") is not None) / n_ok) if n_ok else None,
+        "mean_reward": (sum(rewards) / len(rewards)) if rewards else None,
         "inference_gpu_s_per_ok_task": (inference_s / n_ok) if n_ok else None,
         "server_stats": stats,
         "tasks": rows,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-        "note": "Do not report these as Level-1 Replay numbers.",
+        "note": "Do not report these as Level-1 Replay numbers. Parity uses conversation_s_per_task, never outer wall_s.",
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2, default=str) + "\n")

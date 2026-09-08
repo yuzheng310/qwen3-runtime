@@ -2,7 +2,8 @@ import torch
 
 from qwen3_runtime.config import Config
 from qwen3_runtime.engine.engine import Engine
-from qwen3_runtime.engine.model_runner import PagedRunner, PytorchEagerRunner
+from qwen3_runtime.engine.model_runner import PagedRunner
+from qwen3_runtime.reference.eager_runner import PytorchEagerRunner
 from qwen3_runtime.kv.paged import PagedBatch, PagedKVPool
 from qwen3_runtime.models.qwen3 import Qwen3ForCausalLM
 from tests.cpu.test_tiny_qwen3 import tiny_config

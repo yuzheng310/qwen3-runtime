@@ -48,7 +48,7 @@ def main() -> int:
     except subprocess.CalledProcessError:
         missing.append("git status")
     print("hypothesis: clean-commit 4090 baseline; decompose vs-vLLM gap before engine changes")
-    print("correctness: QWEN3_RUNTIME_MODEL=... python -m qwen3_runtime.correctness.cli --max-tokens 16")
+    print("correctness: QWEN3_RUNTIME_MODEL=... python -m qwen3_runtime.reference.cli --max-tokens 16")
     print("benchmark: python -m bench.run_bench --case decode --scale full --engine qwen3-runtime")
     print("parity cases: decode latency batch8 throughput prefill longctx")
     print("profile: QWEN3_RUNTIME_MODEL=/path/to/model bash scripts/nsys_profile.sh decode")

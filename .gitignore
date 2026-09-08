@@ -19,12 +19,27 @@ venv/
 *.sqlite
 *.qdrep
 
+# Raw run stdout and profiler dumps under bench results. The structured
+# .json/.jsonl beside them carry the evidence; these are the unparsed streams.
+bench/results/**/*.out
+bench/results/**/*.log
+bench/results/**/*.err
+bench/results/**/*.pstats
+bench/results/**/*.pstats.txt
+bench/results/**/*_proc_stacks.txt
+bench/results/**/*_proc_wchan.txt
+bench/results/**/*_pyspy_dump.txt
+!bench/results/bench_run.log
+
 # Stage-2 raw HF parquet and large tokenizer blobs (keep hashes + compact JSON in git)
 workloads/code_localization/raw/
 workloads/code_localization/tokenizer/tokenizer.json
 workloads/code_localization/tokenizer/vocab.json
 workloads/code_localization/tokenizer/merges.txt
 workloads/code_localization/token_ids/
+
+# Editor state
+first-principles/.obsidian/
 
 # OS
 .DS_Store
