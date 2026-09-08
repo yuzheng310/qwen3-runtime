@@ -4,201 +4,147 @@
 
 <h1>qwen3-runtime</h1>
 
-<h3>Rollout inference for Agentic RL and multi-turn code agents</h3>
+<h3>A compact single-GPU rollout inference engine for Qwen3</h3>
 
-<p>
-  Keep model state alive across tool calls.<br>
-  Make trajectory generation cheaper, measurable, and easier to reason about.
-</p>
+<p>Retain KV across tool calls · Batch concurrent trajectories · Integrate with SkyRL</p>
 
 <p>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-4C8BF5?style=flat-square"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"></a>
   <a href="docs/pins/Qwen3-4B/config.json"><img alt="Model" src="https://img.shields.io/badge/model-Qwen3-7C3AED?style=flat-square"></a>
   <a href="TEST_RESULTS.md"><img alt="Tests" src="https://img.shields.io/badge/tests-327%20passed-2EA44F?style=flat-square"></a>
-  <a href="RESULTS.md"><img alt="vLLM parity" src="https://img.shields.io/badge/vLLM%20parity-94.7--97.7%25-F59E0B?style=flat-square"></a>
 </p>
 
 <p>
-  <a href="#positioning">Positioning</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="#design">Design</a> ·
-  <a href="#workload">Workload</a> ·
-  <a href="#results">Results</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="README.zh-CN.md">简体中文</a>
+  <a href="#quick-start">Quick start</a> · <a href="#architecture">Architecture</a> · <a href="#rollout-results">Rollout results</a> · <a href="#performance">Serving curves</a> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
 </div>
 
+
 ---
 
-<a id="positioning"></a>
+`qwen3-runtime` implements the inference side of multi-turn agent rollouts:
+generate an action, retain session KV during tool execution, then continue from
+the appended observation. A shared driver batches concurrent trajectories;
+a SkyRL integration connects generation to the training lifecycle.
 
-## Positioning
+The project targets Qwen3 on a single GPU. CodeScout-4B code-localization
+trajectories provide the reference workload. The implementation is intended for
+rollout systems research, with explicit boundaries between model execution,
+scheduling, state management, and integration code.
 
-> [!IMPORTANT]
-> `qwen3-runtime` is the **inference layer of the Agentic RL rollout loop**—not
-> another general-purpose model server.
+## Core capabilities
 
-Agentic RL does not train on isolated chat completions. It generates
-**trajectories**: a policy model produces an action, an agent executes a tool,
-the environment returns an observation, and the same model session continues
-with a longer context. This loop repeats until the trajectory can be scored and
-used for training.
-
-The runtime targets our own Qwen3-based code-localization policy model. Public
-evaluation uses **CodeScout-4B as a reproducible reference workload**; CodeScout
-is not the product identity. On one GPU, the runtime retains session KV while
-the agent is using tools, resumes from the appended suffix, and applies
-target-verified speculative decoding to the short generation bursts common in
-agent trajectories.
-
-The systems objective is therefore different: optimize the cost of producing a
-complete rollout, not only the latency of one completion.
-
-**Small by design.** Core execution and state management fit in roughly
-**3,000 lines of Python** (excluding tests, benchmarks, protocol adapters, and
-replaceable kernels). The scheduler, paged KV, model execution, sampling, and
-session lifecycle keep explicit boundaries, making the system practical to
-read end to end, test in isolation, and modify without pulling apart the stack.
-
-<table>
-  <tr>
-    <th align="center">Serving foundation</th>
-    <th align="center">Reusable context</th>
-    <th align="center">Exact continuations</th>
-    <th align="center">Verification</th>
-  </tr>
-  <tr>
-    <td align="center"><strong>94.70–97.70%</strong><br><sub>of vLLM throughput</sub></td>
-    <td align="center"><strong>70.6%</strong><br><sub>of prompt tokens</sub></td>
-    <td align="center"><strong>1,901 / 1,901</strong><br><sub>adjacent turns</sub></td>
-    <td align="center"><strong>327 passed</strong><br><sub>18 resource skips</sub></td>
-  </tr>
-</table>
-
-### Why rollout inference is different
-
-| Conventional stateless serving | Agentic rollout inference |
+| Capability | Implementation |
 |---|---|
-| Requests are treated independently | Multiple model calls belong to one trajectory and session |
-| State is released after generation | KV remains resident while the agent executes a tool |
-| The next request submits another full prompt | The next turn usually appends only a new observation |
-| Main view: request latency and tokens/s | Main view: trajectory cost, tail latency, trajectories/GPU-hour |
-| Sampling ends at the response boundary | Sampling remains correct across repeated pause/resume cycles |
+| Persistent session KV | Pause between turns; reuse exact token prefixes and prefill the appended suffix. Divergent histories restart instead of reusing incompatible state. |
+| Concurrent rollouts | A shared engine driver admits asynchronous turns into continuous batches, with chunked prefill, paged KV, and memory-aware scheduling. |
+| Sampling and logprobs | Temperature, top-k/top-p/min-p, penalties, seeded sampling, and per-token logprobs; rollout outputs keep token and logprob lengths aligned. |
+| Speculative decoding | N-gram proposals verified by the target model, with rejected KV rolled back. |
+| Training lifecycle | SkyRL adapter interfaces for generation, sleep/wake, weight updates, abort, and session cleanup. Old sessions are released before policy weights change. |
+| Inference interfaces | `LLM.generate()` / `LLM.session()`, plus an OpenAI-compatible CodeScout adapter. |
 
-<a id="architecture"></a>
+<a id="rollout-results"></a>
 
-## Rollout architecture
+## What the rollout mechanisms changed
 
-```mermaid
-flowchart LR
-    P["Policy model<br/>Qwen3"] --> A["Action / tool call"]
-    A --> D{"Trajectory complete?"}
-    D -- "No" --> K["Pause session<br/>retain paged KV"]
-    K --> T["Agent + tool<br/>+ environment"]
-    T --> O["Observation suffix"]
-    O --> R["Resume same session"]
-    R --> P
-    D -- "Yes" --> X["Trajectory"]
-    X --> V["Reward / verifier"]
-    V --> L["RL trainer"]
+### Keep session KV across tool calls
 
-    classDef runtime fill:#fff4d6,stroke:#f59e0b,color:#111827,stroke-width:2px;
-    class P,K,R runtime;
-```
+![Session-enabled GRPO integration: generation and complete step timing](docs/assets/performance/grpo-session-kv.png)
 
-The runtime owns the highlighted inference state. Agent planning, tools,
-environment execution, trajectory storage, reward, and training stay outside
-the engine.
+In one archived CodeScout GRPO step (8 prompts × 8 samples), the session-enabled
+integration reduced the recorded generation phase from **513.35 to 408.68 s**
+(**1.26×**). The complete step changed from **1844.14 to 1732.44 s** (**1.064×**):
+generation improvements do not translate one-for-one into training speedup.
+The enabled arm reused 1.63M prompt tokens across 223 resumed turns.
 
-<a id="design"></a>
+This is a **historical integration observation**, not an isolated full-step KV
+ablation: the enabled revision also offloads weights during sleep. One step,
+one seed, differing sampled trajectories; no training-quality or current-release
+performance claim.
 
-## Designed around the rollout loop
+### Batch the turns that GRPO generates concurrently
 
-| Mechanism | Why it matters for rollouts |
-|---|---|
-| **Persistent session KV** | A completed turn enters `PAUSED` instead of releasing paged KV. After tool execution, `resume_request` prefills only the last uncomputed action token and the appended observation. |
-| **Target-verified speculation** | N-gram prompt lookup proposes tokens; the Qwen3 policy verifies them before commit. Rejected KV is rolled back, so speculation does not become an approximate policy. |
-| **Rollout sampling semantics** | Temperature, top-k, top-p, stop/EOS handling, and per-session RNG live in the engine. |
-| **Concurrent trajectory serving** | Continuous batching, chunked prefill, paged KV, memory-aware admission, and preemption support multiple active rollouts. |
-| **Narrow Agent boundary** | The core speaks token IDs. A thin OpenAI-compatible adapter handles chat templates and tool-call mapping without absorbing the Agent stack. |
-| **Training-oriented correctness** | Tests cover greedy equivalence, sampling distribution, session isolation, KV release, pause/resume equivalence, and speculative commit/rollback. |
+![Serial and batched rollout driver comparison with session KV enabled](docs/assets/performance/grpo-batching.png)
 
-<a id="workload"></a>
+With session KV enabled in both arms, the same-build control admits one turn
+at a time; the batched arm lets turns share a step. The recorded generation
+span fell **380.67 → 289.34 s** (**1.32×**), while engine steps fell
+**28,753 → 12,840** and mean batch rose **1.00 → 2.26**. Request-step totals
+remained close (28,753 versus 28,991); the driver performed comparable decode
+work in fewer engine steps.
 
-## Workload that shaped the design
+The span includes tool execution between the first admitted and last retired
+turn. It excludes parts of the SkyRL generation timer above, so **the two
+speedups must not be multiplied**. These are single-run observations with 299
+versus 297 turns, not a controlled identical-token replay.
+[Evidence provenance, limitations, and plotting script](RESULTS.md#rollout-feature-observations).
 
-The reproducible reference is CodeScout-4B on code-localization trajectories.
-The frozen public workload contains **494 tasks** and **2,395 model calls**.
+<a id="performance"></a>
 
-| Rollout characteristic | Observed value |
-|---|---:|
-| Median model calls per task | **5** |
-| Median request shape | **9,981 input / 87 output tokens** |
-| Exact append-only adjacent turns | **1,901 / 1,901** |
-| Prompt tokens reusable through session continuation | **70.6%** |
+## Performance at a glance
 
-These are long-context, short-output, multi-turn sessions—not unrelated
-prompts. That workload shape is why session-persistent KV is the central
-abstraction. Compact evidence is retained under
-[`workloads/code_localization/`](workloads/code_localization/).
+![Session throughput, goodput, p99 TTFT and p99 TPOT versus concurrent sessions](docs/assets/performance/session-scaling.png)
 
-<a id="results"></a>
+**More KV helps overloaded sessions, but does not remove the latency boundary.**
+In this historical sweep, both allocations stay within the recorded p99 limits
+through N=6 among the measured points. At N=8, both exceed the TTFT and TPOT
+limits; extra KV preserves more goodput beyond that point. These are two memory
+allocations on the **same GPU**, not a comparison of two GPU models.
 
-## Serving foundation and results
-
-Rollout-specific mechanisms sit on a complete, independently owned Qwen3
-serving path:
-
-```text
-request/session lifecycle
-        ↓
-continuous batching + chunked prefill + preemption
-        ↓
-paged KV + FlashInfer paged attention
-        ↓
-Qwen3 model execution + sampling + speculative verification
-        ↓
-CUDA Graph decode / eager split-KV long-context fallback
-```
-
-On the recorded RTX 4090-class 48 GiB environment with Qwen3-4B BF16:
-
-| Measurement | qwen3-runtime | vLLM 0.27.1 | Relative |
-|---|---:|---:|---:|
-| Closed-batch output throughput, six workloads | — | — | **94.70–97.70%** |
-| Six-session SLO goodput | **1.355 req/s** | **1.398 req/s** | **96.9%** |
-
-These measurements establish the serving baseline; matching vLLM is not the
-project identity. The unit of optimization is an **Agentic RL trajectory**.
-See [RESULTS.md](RESULTS.md) for the full table, scope, environment, and retained
-raw JSON.
-
-## Repository map
-
-| Path | Responsibility |
-|---|---|
-| [`qwen3_runtime/`](qwen3_runtime/) | Model execution, scheduler, paged KV, sampling, session state, speculation |
-| [`scripts/codescout_openai_server.py`](scripts/codescout_openai_server.py) | Loopback CodeScout/OpenAI-compatible rollout adapter |
-| [`bench/`](bench/) | Closed-batch, SLO, session-capacity, and replay harnesses |
-| [`tests/`](tests/) | CPU invariants, reference checks, session/speculation tests, GPU checks |
-| [`workloads/code_localization/`](workloads/code_localization/) | Compact reproducible rollout workload evidence |
-| [`bench/results/`](bench/results/) | Selected clean benchmark artifacts |
+Each point is one measured five-turn-per-session run. Goodput counts turns
+meeting **both TTFT ≤ 4.5 s and TPOT ≤ 100 ms**, divided by measured wall time.
+The TTFT panel uses a log scale. Small samples (5–60 turns) limit tail estimates;
+this is historical evidence, not a current-release capacity guarantee.
+[Metric definitions, raw data, and reproduction](RESULTS.md#performance-figures).
 
 <a id="quick-start"></a>
 
 ## Quick start
 
-### 1. Install
+### 1. Install and try the CPU example
+
+From the repository root:
 
 ```bash
 uv sync --frozen --all-extras
 ```
 
-Model weights are not included. Fetch the pinned model or point
-`QWEN3_RUNTIME_MODEL` to a compatible local directory:
+Run the following with `uv run python`. It uses a tiny **randomly initialized**
+model to demonstrate the API and KV lifecycle; its output is token IDs, not
+useful language generation.
+
+```python
+from qwen3_runtime import LLM, SamplingParams
+
+llm = LLM()  # Tiny random model on CPU; no weights to download.
+greedy = SamplingParams(temperature=0.0)
+print(llm.generate([1, 2, 3], sampling=greedy, max_tokens=3))
+
+with llm.session() as session:
+    prompt_ids = [1, 2, 3]
+    session.turn(prompt_ids, sampling=greedy, max_tokens=2)
+    # Keep the exact generated IDs, then append a toy observation token.
+    next_prompt_ids = prompt_ids + session.last_tokens + [7]
+    session.turn(next_prompt_ids, sampling=greedy, max_tokens=2)
+    print(session.report())
+```
+
+Pass the complete token history to each `session.turn()`. The second history
+must contain the exact prior prompt and generated IDs followed by new input to
+reuse held KV. `session.report()` reports reuse; leaving the context releases
+the session. Re-encoding rendered chat text can change the prefix and trigger
+a full prefill. The example uses token IDs to make that boundary explicit.
+
+`LLM.generate()` is a simple synchronous facade. Concurrent trajectory batching
+is provided by the rollout driver used by the SkyRL adapter; passing a list of
+prompts to the facade does not itself demonstrate concurrent batching.
+
+### 2. Use model weights
+
+Model weights are not included. Inspect the download options and point to a
+compatible pinned Qwen3-4B directory:
 
 ```bash
 uv run python scripts/fetch_model.py --help
@@ -206,49 +152,135 @@ export QWEN3_RUNTIME_MODEL=/path/to/Qwen3-4B
 uv run python scripts/gpu_ready.py
 ```
 
-### 2. Verify
+```python
+import os
+from transformers import AutoTokenizer
+from qwen3_runtime import LLM, SamplingParams
+
+model_dir = os.environ["QWEN3_RUNTIME_MODEL"]
+llm = LLM(model_dir, tokenizer=AutoTokenizer.from_pretrained(model_dir))
+print(llm.generate("Explain what a KV cache stores.",
+                   sampling=SamplingParams(temperature=0.0), max_tokens=64))
+```
+
+Supply a tokenizer for text input. Full-model GPU execution requires a suitable
+CUDA/PyTorch environment and sufficient model and KV memory. The factory selects
+FlashInfer on CUDA when installed, otherwise PyTorch; Triton is an explicitly
+selectable backend. `--all-extras` installs the declared development and
+correctness dependencies, **not FlashInfer, Ray, or SkyRL**. Accelerated and
+training environments need their own compatible dependencies.
+
+### 3. Verify or benchmark
 
 ```bash
 uv run --frozen python -m pytest tests -q
-```
-
-The latest exported record is in [TEST_RESULTS.md](TEST_RESULTS.md). GPU and
-full-model checks require the corresponding hardware and weights.
-
-### 3. Run a benchmark
-
-```bash
 uv run python -m bench.run_bench \
-  --case decode \
-  --scale full \
-  --engine qwen3-runtime \
-  --model "$QWEN3_RUNTIME_MODEL" \
-  --out /tmp/qwen3-runtime_decode.json
+  --case decode --scale full --engine qwen3-runtime \
+  --model "$QWEN3_RUNTIME_MODEL" --out /tmp/qwen3-runtime_decode.json
 ```
 
-Full-scale benchmarks reject a dirty Git worktree by default. The frozen
-measurement contract is documented in [bench/CONTRACT.md](bench/CONTRACT.md).
+Tests can run on CPU with resource-dependent checks skipped. Full-scale
+benchmarks require the corresponding hardware and weights and reject a dirty
+Git worktree by default. See [bench/CONTRACT.md](bench/CONTRACT.md).
 
-## Scope and integration contract
+<a id="architecture"></a>
 
-`qwen3-runtime` owns token generation, sampling, request/session lifecycle,
-paged KV, batching, and speculative verification. It does **not** implement the
-RL algorithm, trainer, reward model, Agent planner, sandbox, or a multi-tenant
-API gateway.
+## Architecture and training integration
 
-Training-side weight synchronization and policy-version ownership remain
-integration responsibilities. Retained KV is valid only for the exact policy
-weights that created it.
+```mermaid
+flowchart LR
+    A["Agent / tool / environment"] -->|"Prompt + observation"| D["Rollout driver"]
+    D --> E["Engine: batch + generate"]
+    E -->|"Tokens + logprobs"| A
+    E <--> K["Session KV: pause / resume"]
+    A -->|"Completed trajectories"| T["External trainer + reward"]
+    T -->|"Updated policy weights"| I["SkyRL integration"]
+    I -->|"Sleep / update / wake"| E
+    I -->|"Invalidate old sessions"| K
+    classDef runtime fill:#fff4d6,stroke:#f59e0b,color:#111827;
+    class D,E,K,I runtime;
+```
+
+Highlighted components live in this repository. The external trainer controls
+when to update the policy; the integration exposes weight-update and lifecycle
+hooks, and the runtime manages the affected inference state. KV from an older
+policy must not survive into generation under new weights.
+
+The [SkyRL adapter](qwen3_runtime/integrations/skyrl/inference_engine.py) exposes
+`generate`, `chat_completion`, `sleep`, `wake_up`, `update_named_weights`, and
+`abort_generation`. [Factory injection](qwen3_runtime/integrations/skyrl/inject.py)
+provides `patch_skyrl_factory()` for a compatible SkyRL entrypoint before it
+creates inference engines. Ray and SkyRL are external dependencies; this is an
+integration entrypoint, not a self-contained training launch command.
+
+The engine does not implement the RL algorithm, reward, agent planner, tool
+sandbox, or multi-tenant gateway. Integration behavior has CPU regression
+coverage; the latest public verification did not run a full SkyRL training job.
+
+<a id="results"></a>
+
+## Evidence and measurement scope
+
+### Frozen serving baseline
+
+The retained measurements below come from **historical clean revisions**, on
+the recorded RTX 4090-class 48 GiB environment with Qwen3-4B BF16. They are not a
+GPU performance revalidation of the current source snapshot.
+
+![Measured output throughput of qwen3-runtime and vLLM across six workloads](docs/assets/performance/serving-baseline.png)
+
+Bars show the median of three trials; whiskers retain the measured min–max
+range, including the prefill-shaped run's variability. Each panel has its own
+zero-based scale. These are different workloads, not points on one scaling curve.
+
+| Measurement | qwen3-runtime | vLLM 0.27.1 | Relative |
+|---|---:|---:|---:|
+| Closed-batch output throughput, six workloads | — | — | 94.70–97.70% |
+| Six-session SLO goodput | 1.355 req/s | 1.398 req/s | 96.9% |
+
+[RESULTS.md](RESULTS.md) records the measurement contract, exact environment,
+and raw JSON links. These serving measurements do not establish an end-to-end
+training speedup or reward improvement.
+
+### Reference workload
+
+The retained summaries describe 494 CodeScout tasks and 2,395 model calls:
+
+| Characteristic | Observation |
+|---|---:|
+| Median calls per task | 5 |
+| Median input / output tokens | 9,981 / 87 |
+| Adjacent turns with exact append-only input histories | 1,901 / 1,901 |
+| Prompt tokens potentially reusable across turns | 70.6% |
+
+The append-only count describes **input-history structure**, not output
+correctness. The reuse percentage describes workload opportunity, not measured
+speedup or guaranteed cache hits. Compact summaries live under
+[workloads/code_localization/](workloads/code_localization/); raw replay token
+corpora and model weights are not distributed.
+
+## Verification and limits
+
+The latest [test record](TEST_RESULTS.md) reports **327 passed, 18 skipped** on
+CPU, a successful wheel/source build, and 30 repeated passes of the concurrent
+batch regression. Coverage includes session isolation, state release on weight
+updates, token/logprob alignment, sampling, and speculative commit/rollback.
+Skipped checks require optional GPU, model, backend, or replay-token resources.
+GPU performance and full SkyRL training were not rerun for this snapshot.
+
+## Repository map
+
+| Path | Responsibility |
+|---|---|
+| [llm.py](qwen3_runtime/llm.py) | Synchronous generation and session facade |
+| [engine/](qwen3_runtime/engine/) | Scheduling, request lifecycle, model runner, weight handling |
+| [rollout/](qwen3_runtime/rollout/) | Concurrent driver, sessions, lifecycle, logprob handling |
+| [integrations/skyrl/](qwen3_runtime/integrations/skyrl/) | Training adapter, Ray actor, factory integration |
+| [attention/](qwen3_runtime/attention/) | PyTorch, FlashInfer, and Triton attention backends |
+| [serving/](qwen3_runtime/serving/) | Protocol helpers, detokenization, SLO harness |
+| [CodeScout server](scripts/codescout_openai_server.py) | OpenAI-compatible HTTP adapter |
+| [bench/](bench/) · [tests/](tests/) | Measurement harnesses and correctness checks |
 
 ---
 
-<div align="center">
-
-<p>
-  Built for rollout systems research · Apache License 2.0 ·
-  <a href="RESULTS.md">Results</a> ·
-  <a href="TEST_RESULTS.md">Tests</a> ·
-  <a href="README.zh-CN.md">中文</a>
-</p>
-
-</div>
+Rollout systems research · [Apache License 2.0](LICENSE) · [简体中文](README.zh-CN.md)

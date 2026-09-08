@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "evidence_class": "historical_single_run_observations",
+  "provenance_limit": "Extracted from archived aggregate reports and adapter counters. These records do not contain the full clean-worktree/environment metadata required by the frozen serving benchmark schema. No current-version GPU rerun or multi-seed confidence interval is claimed.",
+  "session_kv": {
+    "model": "CodeScout-4B",
+    "baseline_revision": "b1a8c47",
+    "session_revision": "f48ea3c",
+    "settings": {
+      "instances": 8,
+      "n_samples_per_prompt": 8,
+      "max_turns": 6,
+      "temperature": 1.0,
+      "seed": 42,
+      "kv_pool_tokens": 192000,
+      "sample_packing": true,
+      "git_cache": "warm"
+    },
+    "timing_s": {
+      "generate": {
+        "off": 513.35,
+        "on": 408.68,
+        "speedup": 1.26
+      },
+      "fwd_logprobs_values_reward": {
+        "off": 101.77,
+        "on": 99.49
+      },
+      "policy_train": {
+        "off": 1225.6,
+        "on": 1220.41
+      },
+      "sync_weights": {
+        "off": 2.23,
+        "on": 2.21
+      },
+      "step": {
+        "off": 1844.14,
+        "on": 1732.44,
+        "speedup": 1.064
+      }
+    },
+    "session_counters": {
+      "turns": 292,
+      "resumed": 223,
+      "started": 69,
+      "rewound": 0,
+      "tokens_prefilled": 859350,
+      "tokens_reused": 1626541,
+      "reuse_pct": 65.4,
+      "evicted": 61,
+      "live_sessions_at_end": 0
+    },
+    "confounds": [
+      "The session-enabled revision also offloads weights during sleep; this is an integration comparison, not a one-variable KV toggle for full-step timing.",
+      "One complete step per arm at one seed; sampled trajectories and token counts differ.",
+      "Generation uses the SkyRL step timer, which differs from the adapter span used by the batching experiment."
+    ],
+    "source_report_sha256": "f89ccc2da4e206b9c1c7b26c1ff7c6779e4065d6925241ee3a0848225da876f9"
+  },
+  "batching": {
+    "model": "CodeScout-4B",
+    "settings": {
+      "instances": 8,
+      "samples_per_prompt": 8,
+      "openhands_concurrency": 4,
+      "sessions_on_both_arms": true,
+      "same_build_reported": true,
+      "exact_build_revision": "not recorded in retained counter files"
+    },
+    "timer": "first turn admitted to last turn retired inside adapter, including tool execution between turns",
+    "serial": {
+      "session": {
+        "turns": 299,
+        "resumed": 230,
+        "started": 69,
+        "rewound": 0,
+        "tokens_prefilled": 815677,
+        "tokens_reused": 1692903,
+        "tokens_rewound": 0,
+        "evicted": 60,
+        "live_sessions": 9,
+        "held_tokens": 84713,
+        "reuse_pct": 67.5
+      },
+      "batching": {
+        "steps": 28753,
+        "batched_requests": 28753,
+        "max_batch": 1,
+        "mean_batch": 1.0
+      },
+      "generation_span_s": 380.67
+    },
+    "batched": {
+      "session": {
+        "turns": 297,
+        "resumed": 224,
+        "started": 73,
+        "rewound": 0,
+        "tokens_prefilled": 883992,
+        "tokens_reused": 1729222,
+        "tokens_rewound": 0,
+        "evicted": 63,
+        "live_sessions": 10,
+        "held_tokens": 83242,
+        "reuse_pct": 66.2
+      },
+      "batching": {
+        "steps": 12840,
+        "batched_requests": 28991,
+        "max_batch": 4,
+        "mean_batch": 2.26
+      },
+      "generation_span_s": 289.34
+    },
+    "source_report_sha256": "31cc84e0da99f5cc0f5cb6d5f039ac1cc57c596cce4837738821f635eb6e7e82",
+    "source_counter_sha256": {
+      "serial": "76d3d8fd9d56b5634e9ea7794eb34b3094d7368bce7dcb29b77fe19397ef1a5c",
+      "batched": "6803de565030a524ea275151ae0274a93f2f730bd23b5a82e2076d9587a95bd3"
+    },
+    "confounds": [
+      "One measured run per arm; sampled trajectories differ (299 vs 297 turns).",
+      "Generation span is not full GRPO training-step time.",
+      "No combined end-to-end speedup is measured for session KV and batching."
+    ]
+  }
+}

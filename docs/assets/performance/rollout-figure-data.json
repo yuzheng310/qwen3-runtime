@@ -1,0 +1,74 @@
+{
+  "source": "bench/results/rollout-features/observations.json",
+  "sha256": "d2704cafc345e2835fb8b6d7c6f49d506075532a0c93f523bf592cb0231a01f9",
+  "session_timing_s": {
+    "generate": {
+      "off": 513.35,
+      "on": 408.68,
+      "speedup": 1.26
+    },
+    "fwd_logprobs_values_reward": {
+      "off": 101.77,
+      "on": 99.49
+    },
+    "policy_train": {
+      "off": 1225.6,
+      "on": 1220.41
+    },
+    "sync_weights": {
+      "off": 2.23,
+      "on": 2.21
+    },
+    "step": {
+      "off": 1844.14,
+      "on": 1732.44,
+      "speedup": 1.064
+    }
+  },
+  "batching": {
+    "serial": {
+      "session": {
+        "turns": 299,
+        "resumed": 230,
+        "started": 69,
+        "rewound": 0,
+        "tokens_prefilled": 815677,
+        "tokens_reused": 1692903,
+        "tokens_rewound": 0,
+        "evicted": 60,
+        "live_sessions": 9,
+        "held_tokens": 84713,
+        "reuse_pct": 67.5
+      },
+      "batching": {
+        "steps": 28753,
+        "batched_requests": 28753,
+        "max_batch": 1,
+        "mean_batch": 1.0
+      },
+      "generation_span_s": 380.67
+    },
+    "batched": {
+      "session": {
+        "turns": 297,
+        "resumed": 224,
+        "started": 73,
+        "rewound": 0,
+        "tokens_prefilled": 883992,
+        "tokens_reused": 1729222,
+        "tokens_rewound": 0,
+        "evicted": 63,
+        "live_sessions": 10,
+        "held_tokens": 83242,
+        "reuse_pct": 66.2
+      },
+      "batching": {
+        "steps": 12840,
+        "batched_requests": 28991,
+        "max_batch": 4,
+        "mean_batch": 2.26
+      },
+      "generation_span_s": 289.34
+    }
+  }
+}

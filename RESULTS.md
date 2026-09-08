@@ -1,6 +1,8 @@
 # Published benchmark evidence
 
-Only clean-commit runs with `forced_length_ok=true` are included here. Numeric
+The frozen serving baseline uses clean-commit runs with `forced_length_ok=true`.
+The separate rollout-feature section contains historical integration observations
+with a different, explicitly limited provenance record. Numeric
 measurements and reproducibility fields are preserved from the development
 evidence store; ephemeral benchmark-host names are removed from the public JSON.
 
@@ -48,3 +50,185 @@ The raw JSON records exact commands and software versions. The benchmark host
 reported an RTX 4090-class GPU with 50,866,487,296 bytes of framebuffer. The
 session experiment simulated a 24 GiB card budget after model weights and fixed
 overhead. Model weights are not distributed in this repository.
+
+
+<a id="performance-figures"></a>
+
+## Performance figures: metrics, sources, and reproduction
+
+The figures use established serving metrics rather than a composite project
+score. [NVIDIA GenAI-Perf](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/perf_benchmark/genai-perf-README.html)
+reports output throughput, request latency, and time to first token.
+[vLLM's metric definitions](https://docs.vllm.ai/projects/spyre/en/latest/user_guide/performance.html)
+distinguish per-request TPOT from individual inter-token latency (ITL), and
+[vLLM bench serve](https://docs.vllm.ai/en/latest/cli/bench/serve/) supports goodput
+with explicit latency thresholds. [NVIDIA's benchmarking guidance](https://docs.nvidia.com/nim/large-language-models/latest/reference/benchmarking.html)
+also recommends concurrency sweeps to expose throughput/latency tradeoffs.
+
+| Plotted metric | Exact source field / interpretation |
+|---|---|
+| Output throughput | Session: `metrics.output_tok_s`; baseline: `metrics.output_tok_s.median`. Output tokens divided by the measured workload wall time. Session wall time includes simulated tool think time and draining; it is not kernel throughput. |
+| Goodput | `accounting.goodput_per_s` = `accounting.slo_met / metrics.wall_s`. Completed turns satisfying both TTFT ≤ 4.5 s and TPOT ≤ 0.100 s per turn. |
+| p99 TTFT | `ttft_s_p99`, in seconds, measured from host arrival to first output token. It includes queueing; it is not prefill kernel time. |
+| p99 TPOT | `tpot_s_p99 × 1000`, in milliseconds. The p99 across each request's mean inter-token interval; **not** p99 across all individual token intervals. |
+
+No request E2E or trajectory-latency curve is inferred from total wall time.
+No speedup is inferred from the percentage of reusable prompt tokens.
+
+### Session concurrency sweep
+
+![Session concurrency sweep](docs/assets/performance/session-scaling.png)
+
+- Runtime revision: `070cdc50951aa36302357bcd5a6c08b0fbd60b05`, recorded on
+  2026-08-26; all 12 selected records have `dirty=false` and `forced_length_ok=true`.
+- Same recorded RTX 4090-class GPU with 50,866,487,296 bytes of framebuffer;
+  Qwen3-4B BF16, PyTorch 2.8.0+cu128. This is not a retail 24 GiB GPU comparison.
+- Actual allocated KV: 15,576,072,192 bytes (**14.51 GiB**) and 30,111,694,848
+  bytes (**28.04 GiB**). The latter requested 38.51 GiB but allocated 28.04 GiB;
+  the figure labels actual allocations, not simulated card sizes.
+- N = 1, 2, 4, 6, 8, 12 sessions; five sequential turns each; 9,981-token first
+  input, 1,633-token suffixes, 1 s simulated tool think time; seed 20260825;
+  one warmup run; maximum scheduled sequences 8 and token budget 2,048.
+  Output lengths follow the frozen CodeScout distribution, not a constant length.
+- One measured run per point (5N requests), with no repeated-run confidence
+  intervals. p99 values are retained as recorded using linear interpolation of
+  ordered request observations. With 5–60 requests, these are small-sample tail
+  estimates. Passing the two marginal p99 thresholds does not imply every
+  request meets both SLOs: at N=6 with 14.51 GiB KV, 28 of 30 turns meet both.
+- Lines only connect measured points; no smoothing, extrapolation, or invented
+  intermediate measurements. The TTFT axis is logarithmic and explicitly labeled.
+- Both allocations pass the two recorded p99 bounds at N=6 and fail at N=8.
+  Among sampled values, additional KV does not increase that boundary. At N=12,
+  TTFT p99 is 41.05 s versus 9.63 s, and recorded preemptions are 84 versus 0.
+  These observations describe this historical workload, not universal capacity.
+
+Sources: [session-scaling JSON](bench/results/session-scaling/) plus the already
+published [14.51 GiB N=6 record](bench/results/session-capacity/qwen3-runtime_n6.json).
+The two series are runtime memory-budget experiments; no vLLM concurrency curve
+is synthesized from the sparse or cache-contaminated comparison runs.
+
+### Six-workload throughput comparison
+
+![Serving baseline](docs/assets/performance/serving-baseline.png)
+
+Each panel uses a matched runtime/vLLM workload from the closed-batch evidence
+above. Bars are median output tokens/s over three measured trials; whiskers are
+minimum to maximum, **not confidence intervals**. The prefill-shaped runtime
+has a low trial which remains visible. Axes start at zero and vary by panel;
+compare the engines within a panel, not bar lengths across panels. The plotting
+script checks prompt length, output length, and concurrency for each pair.
+
+### Rebuild and audit
+
+From the public repository root (no model or GPU needed):
+
+```bash
+uv run --no-project --with matplotlib==3.11.1 python scripts/plot_performance.py
+```
+
+The script reads only published JSON, validates clean/forced-length provenance
+and sweep configuration, and checks goodput arithmetic. It writes PNG and SVG
+figures plus [figure-data.json](docs/assets/performance/figure-data.json), containing
+the plotted values, source paths, source revisions, and SHA-256 hashes of the
+sanitized input files. Host names are omitted from published benchmark JSON.
+SVGs: [session curve](docs/assets/performance/session-scaling.svg) ·
+[serving comparison](docs/assets/performance/serving-baseline.svg).
+
+These figures visualize retained historical results. They do not represent a
+new GPU benchmark of the current runtime or an end-to-end RL training result.
+
+
+<a id="rollout-feature-observations"></a>
+
+## Rollout feature observations (historical, single-run)
+
+These figures are **not part of the clean/forced-length serving benchmark set**.
+They expose useful archived measurements from the CodeScout/SkyRL integration
+work, with their limitations intact. [observations.json](bench/results/rollout-features/observations.json)
+is a field-preserving extract of the archived step report and adapter counters;
+its `source_report_sha256` / `source_counter_sha256` fields identify the original
+inputs. Raw conversations, tool output, and private environment paths are not
+published. Source hashes identify the archive; they do not substitute for the
+unavailable full experiment environment or independent reproduction.
+
+### Session KV integration
+
+![GRPO step timings](docs/assets/performance/grpo-session-kv.png)
+
+The baseline revision is `b1a8c47`; the session-enabled report references
+`f48ea3c`. Held settings: 8 instances, 8 samples per prompt, maximum 6 turns,
+temperature 1.0, seed 42, a 192,000-token KV pool, sample packing, warm Git cache.
+Both records represent one complete GRPO step. The session-enabled revision
+also offloads weights during sleep, so the full-step change cannot be causally
+assigned to session KV alone. The retained report lacks the full environment
+and clean-worktree metadata used by the frozen serving schema.
+
+| SkyRL timer | Baseline (s) | Session-enabled (s) |
+|---|---:|---:|
+| Generate | 513.35 | 408.68 |
+| Forward logprobs / values / reward | 101.77 | 99.49 |
+| Policy train | 1225.60 | 1220.41 |
+| Weight synchronization | 2.23 | 2.21 |
+| Complete step | 1844.14 | 1732.44 |
+
+Component timers are not assumed to sum to the full-step timer; no synthetic
+stacked decomposition is drawn. The figure plots directly recorded generation
+and complete-step times on separate axes. Enabled counters: 292 turns, 223
+resumed, 69 started, 859,350 prompt tokens prefilled, 1,626,541 reused (65.4%).
+A token-reuse percentage is not a time-saving percentage. One seed and one step
+cannot establish reward improvement or multi-step training convergence.
+
+### Concurrent rollout driver
+
+![GRPO batching comparison](docs/assets/performance/grpo-batching.png)
+
+The archived experiment report states that both arms use the same build and
+instrument, with sessions on, 8 instances × 8 samples, and OpenHands concurrency
+4. The counter files do not record an exact build revision or full hardware
+snapshot. The serial control uses the same driver but admits one turn at a
+time; the other arm permits batching. Plotted values are checked against both
+retained counter files before extracting the public record.
+
+| Counter / timer | Serial | Batched |
+|---|---:|---:|
+| Generation span (s) | 380.67 | 289.34 |
+| Engine steps | 28,753 | 12,840 |
+| Request-steps (sum of requests served per engine step) | 28,753 | 28,991 |
+| Mean batch, recorded | 1.00 | 2.26 |
+| Maximum batch | 1 | 4 |
+| Turns | 299 | 297 |
+| Session reuse (%) | 67.5 | 66.2 |
+| Prefilled tokens | 815,677 | 883,992 |
+| Evicted sessions | 60 | 63 |
+
+Batching saves engine steps, but the batched arm also recomputes more prefill
+and sees different sampled trajectories. A batch step is not a constant-time
+unit, so step reduction cannot be equated to wall-time speedup. The 1.32× span
+ratio is directly measured, with one run per arm and no error bars.
+
+The adapter span runs from first turn admission to last turn retirement and
+includes tool execution between turns. It differs from SkyRL's generation
+phase (which also brackets wake-up and other boundary work). **Do not multiply
+1.26× and 1.32× into a combined acceleration claim.** No end-to-end combined
+training-step measurement is provided.
+
+### Evidence not promoted to performance claims
+
+The fitted prefill/decode time shares are model-based estimates, so they are
+not presented as measured profiler time. Historical speculative-decoding timings
+predate the current logprob-accounting fix; they are not promoted as validated
+training-backend performance for this release. GRPO sibling-prefix reuse is not
+presented as a measured acceleration without a suitable ablation. CPU correctness
+tests for logprobs and weight invalidation establish behavior, not GPU speed.
+
+### Reproduce the figures
+
+```bash
+uv run --no-project --with matplotlib==3.11.1 python scripts/plot_rollout_features.py
+```
+
+The script uses the published observation extract and writes PNG/SVG figures
+plus [rollout-figure-data.json](docs/assets/performance/rollout-figure-data.json)
+with the input hash and plotted values. This reproduces the visualization,
+not the original training experiment. SVGs: [session KV](docs/assets/performance/grpo-session-kv.svg)
+· [batching](docs/assets/performance/grpo-batching.svg).
