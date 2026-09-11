@@ -49,6 +49,35 @@ scheduling, state management, and integration code.
 
 ## What the rollout mechanisms changed
 
+### Session KV versus APC: four-arm diagnostics
+
+![Four KV policies across conversation concurrency](docs/assets/performance/kv-four-arm-concurrency.png)
+
+The four controls separate **session continuation** from **content-addressed
+prefix reuse**. In this historical, no-tool-dwell replay, Session KV removes
+substantial repeated prefill relative to no reuse, but APC alone is competitive
+and faster in several cells. At concurrency 16, adding APC to Session KV lowers
+later-turn prefill from **221,445 to 161,482 tokens**; APC alone uses 161,811.
+The combined arm therefore helps sessions recover reusable prefixes, without
+establishing an advantage over APC alone.
+
+![Sequential four-arm replay diagnostic](docs/assets/performance/kv-four-arm-replay.png)
+
+The sequential records show the same pattern: Session KV processes **1.304M**
+later-turn prefill tokens versus **5.284M** without reuse; APC processes 1.307M.
+The recorded times are shown for transparency, **not as validated benchmarks**:
+source flags are `dirty=true` and `forced_length_ok=false`, warmup differs across
+arms, and there is only one run each. Both experiments use spec=0 and omit tool
+dwell time; they cannot establish live-GRPO capacity or current-default speedup.
+
+**The advantage we can defend is explicit state management for trajectories:**
+pause and resume a known session, reuse its exact continuation, and release its
+state at completion or policy updates. APC can complement this lifecycle by
+recovering cached prefixes. The measurements support avoiding repeated prefill;
+they do not show a universal speed advantage over APC. Parking, eviction, and
+cache pressure remain tradeoffs rather than free gains.
+[Full conditions, validity flags, and data](RESULTS.md#kv-four-arm-diagnostics).
+
 ### Keep session KV across tool calls
 
 ![Session-enabled GRPO integration: generation and complete step timing](docs/assets/performance/grpo-session-kv.png)

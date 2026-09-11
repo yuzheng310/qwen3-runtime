@@ -1,0 +1,483 @@
+{
+  "schema_version": 1,
+  "evidence_class": "historical_diagnostic_not_validated_benchmark",
+  "sequential": [
+    {
+      "arm": "none",
+      "source_sha256": "ca7722504dee34f7f42614c1a7ee4858bdaf7d8697f87a83853d7879ac111665",
+      "environment": {
+        "git_commit": "uncommitted",
+        "dirty": true,
+        "timestamp_utc": "2026-09-04T06:04:20.969591+00:00",
+        "gpu_name": "NVIDIA GeForce RTX 4090",
+        "gpu_memory_total_bytes": 50866487296,
+        "torch": "2.8.0+cu128",
+        "cuda": "12.8"
+      },
+      "forced_length_ok": false,
+      "warmup": 1,
+      "n_tasks": 100,
+      "n_requests": 471,
+      "num_speculative_tokens": 0,
+      "artifact_hashes": {
+        "subset_sha256": "49f71ffffd58c6eeaeb111bad9a1591341d32fecd5d548d91721ca5c62d92c17",
+        "ids_sha256": "27e314db2365682ad7418d1c464230ece2bf3288d766a5ac693fd1c1485d4bb0",
+        "historical_ids_sha256": "b0a3ea2962afe71be0f23661fa6d4284fa41c22f7f704465b0e9a8d6d4156ccc"
+      },
+      "seconds_per_task": 9.68595060669817,
+      "wall_s": 968.595060669817,
+      "later_turn_prefill_tokens": 5284019,
+      "later_turn_prefill_s": 471.8464612402022,
+      "peak_kv_blocks": 2783,
+      "output_lengths_sha256": "0612c3eae9a79fe90251fb1b4b255eeac9f6429a998f3100a2bf7a99597cebdd"
+    },
+    {
+      "arm": "session-only",
+      "source_sha256": "c0b3252eeedde0b357b03c6d80ee41a9646dae896e364dd9ea1661f8c3335f34",
+      "environment": {
+        "git_commit": "uncommitted",
+        "dirty": true,
+        "timestamp_utc": "2026-09-04T06:15:36.261789+00:00",
+        "gpu_name": "NVIDIA GeForce RTX 4090",
+        "gpu_memory_total_bytes": 50866487296,
+        "torch": "2.8.0+cu128",
+        "cuda": "12.8"
+      },
+      "forced_length_ok": false,
+      "warmup": 1,
+      "n_tasks": 100,
+      "n_requests": 471,
+      "num_speculative_tokens": 0,
+      "artifact_hashes": {
+        "subset_sha256": "49f71ffffd58c6eeaeb111bad9a1591341d32fecd5d548d91721ca5c62d92c17",
+        "ids_sha256": "27e314db2365682ad7418d1c464230ece2bf3288d766a5ac693fd1c1485d4bb0",
+        "historical_ids_sha256": "b0a3ea2962afe71be0f23661fa6d4284fa41c22f7f704465b0e9a8d6d4156ccc"
+      },
+      "seconds_per_task": 6.33252892896533,
+      "wall_s": 633.252892896533,
+      "later_turn_prefill_tokens": 1304392,
+      "later_turn_prefill_s": 137.08952435012907,
+      "peak_kv_blocks": 2783,
+      "output_lengths_sha256": "0612c3eae9a79fe90251fb1b4b255eeac9f6429a998f3100a2bf7a99597cebdd"
+    },
+    {
+      "arm": "apc-only",
+      "source_sha256": "61a9f454b0c93c46a1d5a8436dce4f3663c57da62e3ac06c194ff01556ebcf9f",
+      "environment": {
+        "git_commit": "uncommitted",
+        "dirty": true,
+        "timestamp_utc": "2026-09-04T06:26:31.671101+00:00",
+        "gpu_name": "NVIDIA GeForce RTX 4090",
+        "gpu_memory_total_bytes": 50866487296,
+        "torch": "2.8.0+cu128",
+        "cuda": "12.8"
+      },
+      "forced_length_ok": false,
+      "warmup": 0,
+      "n_tasks": 100,
+      "n_requests": 471,
+      "num_speculative_tokens": 0,
+      "artifact_hashes": {
+        "subset_sha256": "49f71ffffd58c6eeaeb111bad9a1591341d32fecd5d548d91721ca5c62d92c17",
+        "ids_sha256": "27e314db2365682ad7418d1c464230ece2bf3288d766a5ac693fd1c1485d4bb0",
+        "historical_ids_sha256": "b0a3ea2962afe71be0f23661fa6d4284fa41c22f7f704465b0e9a8d6d4156ccc"
+      },
+      "seconds_per_task": 6.195867815269157,
+      "wall_s": 619.5867815269157,
+      "later_turn_prefill_tokens": 1307139,
+      "later_turn_prefill_s": 137.5426118625328,
+      "peak_kv_blocks": 12013,
+      "output_lengths_sha256": "0612c3eae9a79fe90251fb1b4b255eeac9f6429a998f3100a2bf7a99597cebdd"
+    },
+    {
+      "arm": "session+apc",
+      "source_sha256": "fd7b92feb1c8633a2e8ebee8ee9b01f8bcb25f86270b5c9f0e1f758a43dac510",
+      "environment": {
+        "git_commit": "uncommitted",
+        "dirty": true,
+        "timestamp_utc": "2026-09-04T06:37:23.502136+00:00",
+        "gpu_name": "NVIDIA GeForce RTX 4090",
+        "gpu_memory_total_bytes": 50866487296,
+        "torch": "2.8.0+cu128",
+        "cuda": "12.8"
+      },
+      "forced_length_ok": false,
+      "warmup": 0,
+      "n_tasks": 100,
+      "n_requests": 471,
+      "num_speculative_tokens": 0,
+      "artifact_hashes": {
+        "subset_sha256": "49f71ffffd58c6eeaeb111bad9a1591341d32fecd5d548d91721ca5c62d92c17",
+        "ids_sha256": "27e314db2365682ad7418d1c464230ece2bf3288d766a5ac693fd1c1485d4bb0",
+        "historical_ids_sha256": "b0a3ea2962afe71be0f23661fa6d4284fa41c22f7f704465b0e9a8d6d4156ccc"
+      },
+      "seconds_per_task": 6.174759952668101,
+      "wall_s": 617.4759952668101,
+      "later_turn_prefill_tokens": 1304392,
+      "later_turn_prefill_s": 137.11996998731047,
+      "peak_kv_blocks": 12013,
+      "output_lengths_sha256": "0612c3eae9a79fe90251fb1b4b255eeac9f6429a998f3100a2bf7a99597cebdd"
+    }
+  ],
+  "concurrent": [
+    {
+      "concurrency": 1,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 181.24468321539462,
+      "later_turn_prefill_tokens": 546403,
+      "later_turn_cached_tokens": 0,
+      "turns_completed": 67,
+      "evicted": 0,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 0,
+        "peak_parked_blocks": 0,
+        "peak_used_blocks": 0,
+        "peak_waiting": 0,
+        "min_free_blocks": null,
+        "watermark_evictions": 0
+      },
+      "arm": "none",
+      "source_sha256": "e3a9fdb902c9808d7de1b34841296479666239c7b1e885c4b7f7751affa95391",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 4,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 78.8073014114052,
+      "later_turn_prefill_tokens": 546403,
+      "later_turn_cached_tokens": 0,
+      "turns_completed": 67,
+      "evicted": 0,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 0,
+        "peak_parked_blocks": 0,
+        "peak_used_blocks": 0,
+        "peak_waiting": 0,
+        "min_free_blocks": null,
+        "watermark_evictions": 0
+      },
+      "arm": "none",
+      "source_sha256": "8d23c90c325825b4653cc94498cc55846af1fca32a107c2ac1aeff7fdae5bbe9",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 8,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 71.62352209258825,
+      "later_turn_prefill_tokens": 546403,
+      "later_turn_cached_tokens": 0,
+      "turns_completed": 67,
+      "evicted": 0,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 0,
+        "peak_parked_blocks": 0,
+        "peak_used_blocks": 0,
+        "peak_waiting": 0,
+        "min_free_blocks": null,
+        "watermark_evictions": 0
+      },
+      "arm": "none",
+      "source_sha256": "1de7629183fba35e3bcff421fcb0fad6e4f3f02d6bfaaad25ce6fdac61ffcacb",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 16,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 68.82650936115533,
+      "later_turn_prefill_tokens": 546403,
+      "later_turn_cached_tokens": 0,
+      "turns_completed": 67,
+      "evicted": 0,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 0,
+        "peak_parked_blocks": 0,
+        "peak_used_blocks": 0,
+        "peak_waiting": 0,
+        "min_free_blocks": null,
+        "watermark_evictions": 0
+      },
+      "arm": "none",
+      "source_sha256": "32f5acfb80dbec2c7cd93c3543a5ba83667e83b777214a3bef9d918300142a48",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 1,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 96.82031072396785,
+      "later_turn_prefill_tokens": 161396,
+      "later_turn_cached_tokens": 0,
+      "turns_completed": 67,
+      "evicted": 0,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 1,
+        "peak_parked_blocks": 2155,
+        "peak_used_blocks": 2155,
+        "peak_waiting": 0,
+        "min_free_blocks": 9858,
+        "watermark_evictions": 0
+      },
+      "arm": "session-only",
+      "source_sha256": "f1eabc53174215fa3e80503a13ac7e8873e4df4a24b4433df02f7519fa56c743",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 4,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 49.52348507102579,
+      "later_turn_prefill_tokens": 161396,
+      "later_turn_cached_tokens": 0,
+      "turns_completed": 67,
+      "evicted": 0,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 2,
+        "peak_parked_blocks": 2155,
+        "peak_used_blocks": 5198,
+        "peak_waiting": 1,
+        "min_free_blocks": 6815,
+        "watermark_evictions": 0
+      },
+      "arm": "session-only",
+      "source_sha256": "63a5902eed4d09a618e9e41f4e6d757210a4ffa48bf91f0bac2de300e338246b",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 8,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 42.379385529085994,
+      "later_turn_prefill_tokens": 161396,
+      "later_turn_cached_tokens": 0,
+      "turns_completed": 67,
+      "evicted": 0,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 3,
+        "peak_parked_blocks": 2155,
+        "peak_used_blocks": 7675,
+        "peak_waiting": 2,
+        "min_free_blocks": 4338,
+        "watermark_evictions": 0
+      },
+      "arm": "session-only",
+      "source_sha256": "00c6256255d1a324da48372d104f9eaf5ecb47474a3b2be1929259511c0f2da4",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 16,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 43.82690113969147,
+      "later_turn_prefill_tokens": 221445,
+      "later_turn_cached_tokens": 0,
+      "turns_completed": 67,
+      "evicted": 10,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 3,
+        "peak_parked_blocks": 2155,
+        "peak_used_blocks": 11011,
+        "peak_waiting": 2,
+        "min_free_blocks": 1002,
+        "watermark_evictions": 10
+      },
+      "arm": "session-only",
+      "source_sha256": "e310d2d85e2ba68ffab990341f87e1c9c529ed3ee409a9eae372cd353b536a4b",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 1,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 94.40816115774214,
+      "later_turn_prefill_tokens": 161811,
+      "later_turn_cached_tokens": 384592,
+      "turns_completed": 67,
+      "evicted": 0,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 0,
+        "peak_parked_blocks": 0,
+        "peak_used_blocks": 0,
+        "peak_waiting": 0,
+        "min_free_blocks": null,
+        "watermark_evictions": 0
+      },
+      "arm": "apc-only",
+      "source_sha256": "dd683f120f76bb8326847bbe6a2be29bda36e6b68c1818ad6a3f430700ba0546",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 4,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 45.06415836978704,
+      "later_turn_prefill_tokens": 161811,
+      "later_turn_cached_tokens": 384592,
+      "turns_completed": 67,
+      "evicted": 0,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 0,
+        "peak_parked_blocks": 0,
+        "peak_used_blocks": 0,
+        "peak_waiting": 0,
+        "min_free_blocks": null,
+        "watermark_evictions": 0
+      },
+      "arm": "apc-only",
+      "source_sha256": "f2f580f317924ad090480a3f930af1c56103c94c45542d2a33aeb950dfef8a6b",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 8,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 38.839318259619176,
+      "later_turn_prefill_tokens": 161811,
+      "later_turn_cached_tokens": 384592,
+      "turns_completed": 67,
+      "evicted": 0,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 0,
+        "peak_parked_blocks": 0,
+        "peak_used_blocks": 0,
+        "peak_waiting": 0,
+        "min_free_blocks": null,
+        "watermark_evictions": 0
+      },
+      "arm": "apc-only",
+      "source_sha256": "18588b381efe263f8110e06afb094d8a7c25d92844e33b18520239683aeb986c",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 16,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 37.67500680498779,
+      "later_turn_prefill_tokens": 161811,
+      "later_turn_cached_tokens": 384592,
+      "turns_completed": 67,
+      "evicted": 0,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 0,
+        "peak_parked_blocks": 0,
+        "peak_used_blocks": 0,
+        "peak_waiting": 0,
+        "min_free_blocks": null,
+        "watermark_evictions": 0
+      },
+      "arm": "apc-only",
+      "source_sha256": "b9177635d60a7f86ced4889bb689ff8a24c71c762f2c7abd437cb435127f711e",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 1,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 94.32285994756967,
+      "later_turn_prefill_tokens": 161411,
+      "later_turn_cached_tokens": 11680,
+      "turns_completed": 67,
+      "evicted": 4,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 1,
+        "peak_parked_blocks": 2155,
+        "peak_used_blocks": 11355,
+        "peak_waiting": 0,
+        "min_free_blocks": 658,
+        "watermark_evictions": 4
+      },
+      "arm": "session+apc",
+      "source_sha256": "5484f3ec58227e718586c024f1907a72906b21aa764ff22f33a0ebacbcc58d7d",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 4,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 45.607326639816165,
+      "later_turn_prefill_tokens": 161431,
+      "later_turn_cached_tokens": 41824,
+      "turns_completed": 67,
+      "evicted": 8,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 2,
+        "peak_parked_blocks": 2155,
+        "peak_used_blocks": 11356,
+        "peak_waiting": 1,
+        "min_free_blocks": 657,
+        "watermark_evictions": 8
+      },
+      "arm": "session+apc",
+      "source_sha256": "af910d92083805400f124e5bd7c09f47d4e8b4cf5a3d08a2ef0ee2489c079050",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 8,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 39.49375208094716,
+      "later_turn_prefill_tokens": 161416,
+      "later_turn_cached_tokens": 56624,
+      "turns_completed": 67,
+      "evicted": 7,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 3,
+        "peak_parked_blocks": 2103,
+        "peak_used_blocks": 11355,
+        "peak_waiting": 2,
+        "min_free_blocks": 658,
+        "watermark_evictions": 7
+      },
+      "arm": "session+apc",
+      "source_sha256": "171979ceb5496d1bde80d2ba7d23842fdda8646dbf7cdba80939f08c74dc6749",
+      "source_environment_metadata": "not recorded in this file"
+    },
+    {
+      "concurrency": 16,
+      "n_conversations": 16,
+      "num_kv_blocks": 12013,
+      "wall_s": 40.03356271702796,
+      "later_turn_prefill_tokens": 161482,
+      "later_turn_cached_tokens": 135856,
+      "turns_completed": 67,
+      "evicted": 23,
+      "num_preemptions": 0,
+      "pool_peaks": {
+        "peak_parked_sessions": 3,
+        "peak_parked_blocks": 1305,
+        "peak_used_blocks": 11355,
+        "peak_waiting": 2,
+        "min_free_blocks": 658,
+        "watermark_evictions": 23
+      },
+      "arm": "session+apc",
+      "source_sha256": "32c0856f25c63045245810133a63661e32e3d96dd98799cfbce792275ba0f7df",
+      "source_environment_metadata": "not recorded in this file"
+    }
+  ],
+  "limits": [
+    "Sequential source: dirty=true, git_commit=uncommitted, forced_length_ok=false; no validated throughput claim.",
+    "Sequential warmup: 1 for none/session-only, 0 for APC arms; no assumption of matched cache warmth.",
+    "Concurrent harness: 16 recorded conversations, 67 turns, spec=0, no tool dwell time, one run/cell; full environment absent from per-cell files.",
+    "Separate probe report flags its numerics gate false in both session arms; these are diagnostic cost observations, not correctness certification.",
+    "Not a GRPO training run and not measured with shipped spec=16 configuration."
+  ]
+}

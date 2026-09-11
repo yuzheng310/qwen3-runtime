@@ -232,3 +232,82 @@ plus [rollout-figure-data.json](docs/assets/performance/rollout-figure-data.json
 with the input hash and plotted values. This reproduces the visualization,
 not the original training experiment. SVGs: [session KV](docs/assets/performance/grpo-session-kv.svg)
 · [batching](docs/assets/performance/grpo-batching.svg).
+
+
+<a id="kv-four-arm-diagnostics"></a>
+
+## Four-arm Session KV / APC diagnostics
+
+[Observation extract](bench/results/kv-ablation/observations.json) retains the
+plotted numeric fields, original input hashes, and available provenance flags.
+These diagnostic records are separate from the validated serving baseline.
+
+- **None:** no retained session and no automatic prefix cache.
+- **Session KV:** retain and resume one conversation's KV; APC off.
+- **APC:** submit the full history and recover matching cached prefix blocks;
+  no retained session.
+- **Session KV + APC:** session continuation plus content-addressed prefix reuse.
+
+### Sequential replay
+
+100 tasks / 471 requests, CodeScout-4B, spec=0, batch 1. All four archives have
+the same subset/ID hashes and recorded output-length sequence, but all record
+`environment.dirty=true`, `git_commit=uncommitted`, and `forced_length_ok=false`.
+Matching lengths do not override these flags or establish token equivalence.
+Warmup is 1 for none/session-only and 0 for APC/combined. There is one trial per
+arm. These limitations preclude a validated speedup claim; the chart labels them.
+The card differs from the earlier GRPO integration experiments: do not chain
+ratios or compare absolute timings between them.
+
+| Arm | Recorded s/task | Later-turn prefill tokens | Peak occupied KV blocks |
+|---|---:|---:|---:|
+| None | 9.686 | 5,284,019 | 2,783 |
+| Session KV | 6.333 | 1,304,392 | 2,783 |
+| APC | 6.196 | 1,307,139 | 12,013 |
+| Session KV + APC | 6.175 | 1,304,392 | 12,013 |
+
+Peak occupied blocks include cache retention and are not total GPU allocation.
+APC's higher occupancy is not automatically wasted memory. Session-only and
+APC are nearly substitutes for repeated prefill on this sequential workload;
+the small timing difference between APC and the combination has no repeat-run
+uncertainty estimate. The observation does not support superiority over APC.
+
+### Concurrent replay
+
+Four arms × concurrency 1/4/8/16, 16 recorded conversations including GRPO
+siblings, 67 completed turns per cell, a 12,013-block pool, spec=0, one run/cell.
+All cells report zero scheduler preemptions. The next turn arrives immediately,
+so this is not a live tool-waiting load. The retained per-cell files lack full
+environment and clean-worktree metadata. No confidence intervals are invented.
+
+At concurrency 16, Session KV alone records 221,445 later-turn prefill tokens
+and 10 session evictions; combined records 161,482 and 23. APC-only records
+161,811 tokens. More evictions can coexist with less recomputation when cached
+prefix blocks remain reusable. Evictions do not measure lost tokens, nor are
+they scheduler preemptions. Arms without sessions trivially have zero session
+evictions; that is not a direct efficiency ranking.
+
+The archived investigation reports at most 3 parked sessions / 2,155 parked
+blocks versus a 5,405-block park cap. It did not demonstrate parked-session
+pool saturation. The absence of dwell time prevents transferring this curve to
+live GRPO memory pressure. Separate numerical probes also marked their gate
+false for session-only and combined; a time/counter plot cannot certify
+numerical correctness. No recommendation to enable APC universally follows.
+
+### Interpretation and reproduction
+
+The supported architectural advantage is trajectory-owned state and lifecycle:
+exact session continuation, explicit release, and invalidation across weight
+updates. The counter evidence supports removing repeated prefill versus no
+reuse. APC is a complementary reuse mechanism, not a baseline the project
+consistently defeats. Choosing a policy must account for dwell time, eviction,
+shared prefixes, and the actual speculative-decoding configuration.
+
+```bash
+uv run --no-project --with matplotlib==3.11.1 python scripts/plot_kv_ablation.py
+```
+
+This rebuilds the diagnostic images from the published extract, not the original
+GPU experiment. [Plotted data and hash](docs/assets/performance/kv-ablation-figure-data.json).
+SVG: [sequential](docs/assets/performance/kv-four-arm-replay.svg) ·
+[concurrent](docs/assets/performance/kv-four-arm-concurrency.svg).

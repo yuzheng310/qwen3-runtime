@@ -46,6 +46,30 @@
 
 ## Rollout 机制带来的实际变化
 
+### Session KV 与 APC：四组对照说明了什么
+
+![四种 KV 策略随会话并发变化的耗时、prefill 量与驱逐次数](docs/assets/performance/kv-four-arm-concurrency.png)
+
+四组对照把**同一 session 的续接**与**按内容匹配的前缀复用**分开。在这组没有
+工具等待时间的历史 replay 中，Session KV 相比不缓存显著减少重复 prefill，
+但纯 APC 同样有效，且在若干配置下更快。并发 16 时，Session KV 叠加 APC 将
+后续轮次 prefill 从 **221,445 降到 161,482 token**；纯 APC 为 161,811。
+组合策略能缓解 session 驱逐后的重算，但没有证明它比纯 APC 更快。
+
+![顺序 replay 的四组 KV 对照](docs/assets/performance/kv-four-arm-replay.png)
+
+顺序实验也呈现相同趋势：Session KV 的后续轮次 prefill 为 **130.4 万 token**，
+不缓存为 **528.4 万**，纯 APC 为 130.7 万。耗时保留展示，但**不作为已验证的
+性能基准**：原始记录为 `dirty=true`、`forced_length_ok=false`，各组 warmup
+不同，且每组只有一次测量。两组实验都是 spec=0、没有真实工具等待，不能代表
+当前默认配置的加速，也没有验证真实 GRPO 的容量边界。
+
+**我们更有依据的优势，是围绕 trajectory 管理明确的会话状态**：暂停与续接同一
+session，复用精确延续的 KV，在结束或策略权重更新时释放状态。APC 可以作为
+补充，恢复仍可复用的前缀。这些数据支持“减少重复 prefill”，不支持“普遍快于
+APC”；驻留、驱逐与缓存压力仍需要权衡。
+[完整条件、有效性标记与原始字段](RESULTS.md#kv-four-arm-diagnostics)。
+
 ### 在工具调用之间保留 session KV
 
 ![Session KV 集成前后的 GRPO 生成阶段与完整 step 耗时](docs/assets/performance/grpo-session-kv.png)
