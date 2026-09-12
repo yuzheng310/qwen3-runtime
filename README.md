@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-4C8BF5?style=flat-square"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"></a>
   <a href="docs/pins/Qwen3-4B/config.json"><img alt="Model" src="https://img.shields.io/badge/model-Qwen3-7C3AED?style=flat-square"></a>
-  <a href="TEST_RESULTS.md"><img alt="Tests" src="https://img.shields.io/badge/tests-362%20passed-2EA44F?style=flat-square"></a>
+  <a href="TEST_RESULTS.md"><img alt="Tests" src="https://img.shields.io/badge/tests-365%20passed-2EA44F?style=flat-square"></a>
 </p>
 
 <p>
@@ -100,7 +100,7 @@ The work also improved the surrounding system:
 
 | Check | Recorded evidence | What it establishes |
 |---|---|---|
-| Public CPU suite | **362 passed / 24 skipped**; [test summary](TEST_RESULTS.md) | Published-source behavior; optional-resource tests remain skipped |
+| Public CPU suite | **365 passed / 24 skipped**; [test summary](TEST_RESULTS.md) | Published-source behavior; optional-resource tests remain skipped |
 | Archived CUDA tests | **6 passed**; [verification records](bench/results/session-cpu-offload/verification.json) | Real GPU save/restore and offload paths |
 | Unforced model checks | **16 cases**, 128–16,384-token prefixes; [per-case checks](bench/results/session-cpu-offload/verification.json) | Bit-exact KV and identical continuation/logprobs against held GPU KV |
 | Replay audit | **58 executions**, including repeated arms and first-use passes; [audit](bench/results/session-cpu-offload/verification.json) | Source/trace linkage, byte conservation and final cleanup; not 58 independent workloads |
@@ -356,7 +356,7 @@ corpora and model weights are not distributed.
 
 ## Verification and limits
 
-The latest [test record](TEST_RESULTS.md) reports **362 passed, 24 skipped** on
+The latest [test record](TEST_RESULTS.md) reports **365 passed, 24 skipped** on
 CPU and a successful wheel/source build. Coverage includes session isolation,
 CPU KV save/restore and admission, explicit completion, weight invalidation,
 token/logprob alignment, sampling, and speculative commit/rollback.

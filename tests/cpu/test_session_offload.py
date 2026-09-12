@@ -9,6 +9,7 @@ from qwen3_runtime.engine.request import RequestStatus
 from qwen3_runtime.engine.session_offload import RestoreAdmissionError
 from qwen3_runtime.models.qwen3 import Qwen3ForCausalLM
 from qwen3_runtime.integrations.skyrl.inference_engine import Qwen3InferenceEngine
+from qwen3_runtime.rollout.execution import SessionRollout
 from tests.cpu.test_tiny_qwen3 import tiny_config
 
 
@@ -105,7 +106,7 @@ def test_explicit_trajectory_end_releases_cpu_and_gpu_ownership():
     import asyncio
 
     engine = _engine()
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
     rid = engine.add_request([1, 2, 3, 4], max_tokens=1, hold_kv=True)
     engine.drain_request(rid)
     req = engine._requests[rid]
@@ -214,11 +215,11 @@ def test_skyrl_adapter_uses_the_same_sync_offload_path():
         first, _ = await wrapper._run_turn(
             [1, 2, 3, 4, 5, 6, 7, 8, 9], max_tokens=1, sampling=None
         )
-        wrapper._driver.stop()
+        wrapper.rollout.stop()
         second, _ = await wrapper._run_turn(
             [1, 2, 3, 4, 5, 6, 7, 8, 9, *first, 10], max_tokens=1, sampling=None
         )
-        wrapper._driver.stop()
+        wrapper.rollout.stop()
         return first, second
 
     first, second = asyncio.run(run())
@@ -229,7 +230,7 @@ def test_skyrl_adapter_uses_the_same_sync_offload_path():
 
 def test_watermark_skips_cpu_sessions_and_reclaims_apc(monkeypatch):
     engine = _engine(blocks=3, cache=True)
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
     first = engine.add_request(list(range(1, 9)), max_tokens=1, hold_kv=True)
     engine.drain_request(first)
     second = engine.add_request([20], max_tokens=1, hold_kv=True)
@@ -253,7 +254,7 @@ def test_watermark_skips_cpu_sessions_and_reclaims_apc(monkeypatch):
 
 def test_watermark_selects_gpu_session_after_older_cpu_session(monkeypatch):
     engine = _engine(blocks=3)
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
     first = engine.add_request([1, 2], max_tokens=1, hold_kv=True)
     engine.drain_request(first)
     engine.offload_request(first)
@@ -278,7 +279,7 @@ def test_watermark_selects_gpu_session_after_older_cpu_session(monkeypatch):
 
 def test_restore_fallback_forgets_retired_session_before_next_claim(monkeypatch):
     engine = _engine()
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
     rid = engine.add_request([1, 2, 3, 4, 5, 6], max_tokens=1, hold_kv=True)
     engine.drain_request(rid)
     engine.offload_request(rid)
@@ -318,7 +319,7 @@ def test_active_prefill_reclaims_idle_session_before_preempting_itself(monkeypat
     import asyncio
 
     engine = _engine(blocks=4)
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
     original = engine.step
     steps = 0
 
@@ -334,10 +335,10 @@ def test_active_prefill_reclaims_idle_session_before_preempting_itself(monkeypat
 
     async def run():
         try:
-            await wrapper._run_turn([1, 2, 3, 4, 5, 6], max_tokens=1, sampling=None)
-            await wrapper._run_turn(list(range(1, 10)), max_tokens=1, sampling=None)
+            await wrapper.run_turn([1, 2, 3, 4, 5, 6], max_tokens=1, sampling=None)
+            await wrapper.run_turn(list(range(1, 10)), max_tokens=1, sampling=None)
         finally:
-            wrapper._driver.stop()
+            wrapper.stop()
 
     asyncio.run(run())
     assert engine.scheduler.num_preemptions == 0
@@ -348,7 +349,7 @@ def test_restore_under_active_pressure_preserves_snapshot_for_retry():
     import pytest
 
     engine = _engine(blocks=4)
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
     rid = engine.add_request(list(range(1, 10)), max_tokens=1, hold_kv=True)
     engine.drain_request(rid)
     engine.offload_request(rid)
@@ -356,34 +357,43 @@ def test_restore_under_active_pressure_preserves_snapshot_for_retry():
     wrapper._sessions.park(rid, history, 0)
     active = engine.add_request([1, 2, 3, 4, 5, 6], max_tokens=8)
     engine.step()
+    before = wrapper.session_report()
     with pytest.raises(RuntimeError, match="defer"):
         wrapper._admit(history + [20], max_tokens=1, sampling=None)
+    after = wrapper.session_report()
+    assert {k: v for k, v in after.items() if not k.startswith("offload_")} == {
+        k: v for k, v in before.items() if not k.startswith("offload_")
+    }
     assert engine.has_cpu_snapshot(rid)
     assert wrapper._sessions.session_tokens(rid) == history
     engine.finish_request(active)
     resumed = wrapper._admit(history + [20], max_tokens=1, sampling=None)
     assert resumed == rid
     assert not engine.has_cpu_snapshot(rid)
+    report = wrapper.session_report()
+    assert report["turns"] == before["turns"] + 1
+    assert report["resumed"] == before["resumed"] + 1
+    assert report["tokens_reused"] == before["tokens_reused"] + len(history)
 
 
 def test_serial_admission_cycles_multiple_offloaded_sessions_to_completion():
     import asyncio
 
     engine = _engine(blocks=4, cache=True, active=1)
-    wrapper = Qwen3InferenceEngine(engine, session_max_blocks=4)
+    wrapper = SessionRollout(engine, session_max_blocks=4)
 
     async def task(index):
         history = [index + 1, 2, 3, 4, 5, 6]
         for suffix in [20, 21, 22]:
-            tokens, _ = await wrapper._run_turn(history, max_tokens=1, sampling=None)
-            history += tokens + [suffix]
+            turn = await wrapper.run_turn(history, max_tokens=1, sampling=None)
+            history += turn.tokens + [suffix]
         return history
 
     async def run():
         try:
             return await asyncio.wait_for(asyncio.gather(*(task(i) for i in range(3))), 3)
         finally:
-            wrapper._driver.stop()
+            wrapper.stop()
 
     assert len(asyncio.run(run())) == 3
     assert engine.session_offload.report()["restored"] > 0
@@ -391,7 +401,7 @@ def test_serial_admission_cycles_multiple_offloaded_sessions_to_completion():
 
 def test_gpu_watermark_never_discards_a_cpu_only_session():
     engine = _engine(blocks=4)
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
     rid = engine.add_request([1, 2, 3, 4, 5, 6], max_tokens=1, hold_kv=True)
     engine.drain_request(rid)
     history = list(engine._requests[rid].token_ids)
@@ -404,3 +414,72 @@ def test_gpu_watermark_never_discards_a_cpu_only_session():
     assert engine.has_cpu_snapshot(rid), "discarding host KV cannot free GPU blocks"
     assert wrapper._sessions.session_tokens(rid) == history
     engine.finish_request(active)
+
+
+def test_forced_replay_and_restore_share_turn_accounting_and_cleanup():
+    import asyncio
+
+    engine = _engine(blocks=3)
+    rollout = SessionRollout(engine, enabled=True, stop_token_ids=(21,))
+
+    async def run():
+        try:
+            prompt = list(range(1, 10))
+            first = await rollout.run_turn(
+                prompt, max_tokens=1, sampling=None,
+                forced_tokens=[21], ignore_eos=True, stop_token_ids=(),
+            )
+            assert first.tokens == [21]
+            assert engine.has_cpu_snapshot(first.request_id)
+            history = prompt + first.tokens + [20]
+            second = await rollout.run_turn(
+                history, max_tokens=1, sampling=None,
+                forced_tokens=[23], ignore_eos=True, stop_token_ids=(),
+            )
+            assert second.request_id == first.request_id
+            assert second.tokens == [23]
+            report = rollout.session_report()
+            assert report["turns"] == 2
+            assert report["started"] == report["resumed"] == 1
+            assert report["offload_restored"] == 1
+            assert await rollout.finish_session(history + second.tokens) == 1
+            assert rollout.session_report()["live_sessions"] == 0
+            assert engine.session_offload.snapshot_count == 0
+            assert engine.block_manager.num_free_blocks == 3
+        finally:
+            rollout.clear()
+
+    asyncio.run(run())
+
+
+def test_restore_fallback_counts_one_cold_turn_through_the_rollout_interface(monkeypatch):
+    import asyncio
+
+    engine = _engine(blocks=3)
+    rollout = SessionRollout(engine, enabled=True)
+
+    async def run():
+        try:
+            prompt = list(range(1, 10))
+            first = await rollout.run_turn(prompt, max_tokens=1, sampling=None)
+            assert engine.has_cpu_snapshot(first.request_id)
+
+            def refuse(_request):
+                raise RestoreAdmissionError("injected permanent restore failure")
+
+            monkeypatch.setattr(engine.session_offload, "begin_restore", refuse)
+            second = await rollout.run_turn(
+                prompt + first.tokens + [20], max_tokens=1, sampling=None,
+            )
+            assert second.request_id != first.request_id
+            assert first.request_id not in engine._requests
+            assert not engine.has_cpu_snapshot(first.request_id)
+            report = rollout.session_report()
+            assert report["turns"] == report["started"] == 2
+            assert report["resumed"] == report["tokens_reused"] == 0
+            assert report["tokens_prefilled"] == 20
+            assert report["live_sessions"] == 1
+        finally:
+            rollout.clear()
+
+    asyncio.run(run())

@@ -15,7 +15,7 @@ def test_finish_does_not_block_the_async_loop_while_engine_is_busy(monkeypatch):
         gate.wait(timeout=0.5)
         return fn()
 
-    monkeypatch.setattr(adapter._driver, "run_on_engine", busy_owner)
+    monkeypatch.setattr(adapter.rollout._driver, "run_on_engine", busy_owner)
 
     async def run():
         task = asyncio.create_task(adapter.finish_session([1, 2, 3]))
@@ -50,7 +50,7 @@ def test_codescout_result_notifies_the_real_session_owner(monkeypatch):
             assert adapter.session_report()["live_sessions"] == 0
             assert actual[2]["qwen3/session_released"] == 1
         finally:
-            adapter._driver.stop()
+            adapter.rollout.stop()
 
     asyncio.run(run())
 

@@ -157,29 +157,10 @@ async def replay(
                     raise ValueError("missing recorded output")
                 start = time.perf_counter()
 
-                def admit():
-                    rid = wrapper._admit(ids, max_tokens=len(forced), sampling=None)
-                    req = engine._requests[rid]
-                    req.forced_tokens = forced
-                    req.ignore_eos = True
-                    req.stop_token_ids = ()
-                    return rid
-
-                # Driver bookkeeping remains the same for every arm.
-                try:
-                    turn = await wrapper._driver.run_turn(
-                        admit, on_done=wrapper._park_or_release
-                    )
-                except RuntimeError as exc:
-                    # Match Qwen3InferenceEngine._turn's existing one-shot
-                    # cold fallback, including its cost in the trial.
-                    if "KV pool" not in str(exc) or not wrapper._session_kv:
-                        raise
-                    totals["capacity_retries"] += 1
-                    wrapper._driver.run_on_engine(wrapper._drop_sessions)
-                    turn = await wrapper._driver.run_turn(
-                        admit, on_done=wrapper._park_or_release
-                    )
+                turn = await wrapper.rollout.run_turn(
+                    ids, max_tokens=len(forced), sampling=None,
+                    forced_tokens=forced, ignore_eos=True, stop_token_ids=(),
+                )
                 elapsed = time.perf_counter() - start
                 if turn.tokens != forced:
                     raise AssertionError("forced replay length/content mismatch")
@@ -206,7 +187,7 @@ async def replay(
         previous = -1
         while True:
             await asyncio.sleep(15)
-            steps = wrapper._driver.stats["steps"]
+            steps = wrapper.rollout.batching_report()["steps"]
             if steps == previous:
                 scheduler = engine.scheduler
                 print(
@@ -218,13 +199,6 @@ async def replay(
                             "running": [r.request_id for r in scheduler.running],
                             "waiting": [r.request_id for r in scheduler.waiting],
                             "free": engine.block_manager.num_free_blocks,
-                            "admissions": [
-                                {
-                                    "active": list(w.deferred_active_ids or ()),
-                                    "free": w.deferred_free_blocks,
-                                }
-                                for w, _ in wrapper._driver._admissions
-                            ],
                             "requests": [
                                 {
                                     "id": r.request_id,
@@ -256,7 +230,8 @@ async def replay(
         torch.cuda.synchronize()
         elapsed = time.perf_counter() - start
         report = wrapper.session_report()
-        totals["max_batch"] = wrapper._driver.report()["max_batch"]
+        totals["capacity_retries"] = wrapper.rollout.batching_report()["capacity_retries"]
+        totals["max_batch"] = wrapper.rollout.batching_report()["max_batch"]
         result = {
             "arm": arm,
             "elapsed_s": elapsed,
@@ -272,8 +247,7 @@ async def replay(
         work.cancel()
         watch.cancel()
         await asyncio.gather(work, watch, return_exceptions=True)
-        wrapper._driver.stop()
-        wrapper._drop_sessions()
+        wrapper.rollout.clear()
         engine.invalidate_all_kv()
     result["offload_after_cleanup"] = engine.session_offload.report()
     return result

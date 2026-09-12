@@ -1,12 +1,12 @@
 # Test results
 
 - Status: **passed**
-- Recorded at: `2026-09-12T16:11:43.770015+08:00`
-- Command: `uv run --frozen python -m pytest tests/ -q --junitxml=<local-output>`
+- Recorded at: `2026-09-12T18:09:38.366777+08:00`
+- Command: `uv run --frozen python -m pytest tests/ -o addopts='' -q --junitxml=<local-output>`
 - Python: `3.13.12` (macOS ARM64)
-- Duration: `4.292 s`
-- Total: **386**
-- Passed: **362**
+- Duration: `4.122 s`
+- Total: **389**
+- Passed: **365**
 - Skipped: **24**
 - Failed / errors: **0 / 0**
 - Package build: `uv build` passed (wheel and source distribution).
@@ -18,7 +18,9 @@ published source snapshot, not a claim that benchmark runs used its Git commit.
 Tests ran in the public repository's isolated environment. Skips require
 optional GPU, model, backend, or frozen replay-token resources. CPU coverage
 includes the new store, transactional restore, stale-weight rejection, scheduler
-capacity handling, and exact trajectory completion.
+capacity handling, and exact trajectory completion. The session execution
+refactor also covers failed-resume rollback, deferred-admission accounting,
+forced-token replay through restore, and cold fallback without duplicate counts.
 
 Independent prior GPU checks covered six CUDA offload tests, 16 real-model KV
 round-trips, full checkpoint/buffer equivalence, and actual Ray finish/sleep/wake.

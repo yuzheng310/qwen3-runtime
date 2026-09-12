@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="许可证" src="https://img.shields.io/badge/license-Apache--2.0-4C8BF5?style=flat-square"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"></a>
   <a href="docs/pins/Qwen3-4B/config.json"><img alt="模型" src="https://img.shields.io/badge/model-Qwen3-7C3AED?style=flat-square"></a>
-  <a href="TEST_RESULTS.md"><img alt="测试" src="https://img.shields.io/badge/tests-362%20passed-2EA44F?style=flat-square"></a>
+  <a href="TEST_RESULTS.md"><img alt="测试" src="https://img.shields.io/badge/tests-365%20passed-2EA44F?style=flat-square"></a>
 </p>
 
 <p>
@@ -93,7 +93,7 @@ APC，所以图中按具体实验标注方案；公开数据也保存了各组�
 
 | 检查 | 已记录证据 | 说明了什么 |
 |---|---|---|
-| 公开版 CPU 测试 | **362 通过 / 24 跳过**；[测试摘要](TEST_RESULTS.md) | 公开源码行为；依赖可选资源的检查仍跳过 |
+| 公开版 CPU 测试 | **365 通过 / 24 跳过**；[测试摘要](TEST_RESULTS.md) | 公开源码行为；依赖可选资源的检查仍跳过 |
 | 历史 CUDA 测试 | **6 通过**；[验证记录](bench/results/session-cpu-offload/verification.json) | 真实 GPU 的保存、恢复与 offload 路径 |
 | 非强制输出的模型检查 | **16 个样本**，前缀 128–16,384 token；[逐项记录](bench/results/session-cpu-offload/verification.json) | KV 逐位一致；与 GPU 保留路径的续写及 logprob 一致 |
 | 回放审计 | **58 次执行**，含重复组与首次运行；[审计记录](bench/results/session-cpu-offload/verification.json) | 源码/轨迹关联、字节守恒及最终清理；不是 58 个独立工作负载 |
@@ -323,7 +323,7 @@ workload 的优化空间，不是实测加速比或保证的缓存命中率。�
 
 ## 验证与限制
 
-最近一次[测试记录](TEST_RESULTS.md)：CPU 上 **362 通过、24 跳过**，wheel 与源码
+最近一次[测试记录](TEST_RESULTS.md)：CPU 上 **365 通过、24 跳过**，wheel 与源码
 包构建成功。测试覆盖 session 隔离、CPU KV 保存/恢复与容量处理、显式结束清理、
 权重失效、token/logprob 对齐、采样与 speculative commit/rollback。
 跳过项依赖可选 GPU、模型、后端或 replay token 资源。独立的

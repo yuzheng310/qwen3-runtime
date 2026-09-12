@@ -94,38 +94,22 @@ class SessionCache:
     )
 
     def claim(self, ids: list[int]) -> Claim | None:
-        """Find the paused session this request continues, and take it."""
-        self.stats["turns"] += 1
-        best: Claim | None = None
-        for session in self._sessions.values():
-            shared = _common_prefix_len(session.tokens, ids)
-            if shared >= len(ids):
-                # Not longer than what the session holds: a sibling sample
-                # replaying the shared opening, not this session's next turn.
-                continue
-            if shared != len(session.tokens):
-                continue
-            if best is None or shared > best.shared:
-                best = Claim(
-                    request_id=session.request_id,
-                    shared=shared,
-                    held=len(session.tokens),
-                    suffix=ids[shared:],
-                )
-        if best is None:
-            self.stats["started"] += 1
-            self.stats["tokens_prefilled"] += len(ids)
-            return None
+        """Immediate claim for callers that do not need a rollback window."""
+        claim = self.reserve_claim(ids)
+        if claim is None:
+            self.record_start(ids)
+        else:
+            self.commit_claim(claim)
+        return claim
 
-        del self._sessions[best.request_id]
-        self.stats["resumed"] += 1
-        self.stats["tokens_reused"] += best.shared
-        self.stats["tokens_prefilled"] += len(best.suffix)
-        return best
+    def record_start(self, ids: list[int]) -> None:
+        """Account for a successfully admitted cold turn."""
+        self.stats["turns"] += 1
+        self.stats["started"] += 1
+        self.stats["tokens_prefilled"] += len(ids)
 
     def reserve_claim(self, ids: list[int]) -> Claim | None:
-        """Find a match without deleting it; the caller must commit/rollback."""
-        self.stats["turns"] += 1
+        """Reserve a match without counting an admission; commit/rollback follows."""
         best: Claim | None = None
         for session in self._sessions.values():
             if session.request_id in self._claims:
@@ -142,8 +126,6 @@ class SessionCache:
             if best is None or candidate.shared > best.shared:
                 best = candidate
         if best is None:
-            self.stats["started"] += 1
-            self.stats["tokens_prefilled"] += len(ids)
             return None
         self._claims.add(best.request_id)
         return best
@@ -154,6 +136,7 @@ class SessionCache:
         self._claims.remove(claim.request_id)
         if self._sessions.pop(claim.request_id, None) is None:
             raise RuntimeError("session disappeared before claim commit")
+        self.stats["turns"] += 1
         self.stats["resumed"] += 1
         self.stats["tokens_reused"] += claim.shared
         self.stats["tokens_prefilled"] += len(claim.suffix)

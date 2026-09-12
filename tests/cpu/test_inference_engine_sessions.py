@@ -1,4 +1,4 @@
-"""The SkyRL adapter must hold KV across a turn, drop it on cue, and batch.
+"""Session rollout holds KV across a turn and batches; the adapter drops it on cue.
 
 The fake engine here is a scheduler and a step loop rather than a stub that
 returns a completion, because both properties under test are properties of how
@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 from qwen3_runtime.engine.request import RequestStatus
+from qwen3_runtime.rollout.execution import SessionRollout
 from qwen3_runtime.integrations.skyrl.inference_engine import (
     Qwen3InferenceEngine,
     _openai_logprob_content,
@@ -131,17 +132,20 @@ class FakeEngine:
         self.calls.append(("abort",))
 
 
-def _turn(wrapper: Qwen3InferenceEngine, ids: list[int]) -> list[int]:
+def _turn(wrapper: SessionRollout | Qwen3InferenceEngine, ids: list[int]) -> list[int]:
     return _turn_with_logprobs(wrapper, ids)[0]
 
 
 def _turn_with_logprobs(
-    wrapper: Qwen3InferenceEngine, ids: list[int]
+    wrapper: SessionRollout | Qwen3InferenceEngine, ids: list[int]
 ) -> tuple[list[int], list[float]]:
     async def run():
-        out = await wrapper._run_turn(ids, max_tokens=32, sampling=None)
-        wrapper._driver.stop()
-        return out
+        rollout = wrapper.rollout if isinstance(wrapper, Qwen3InferenceEngine) else wrapper
+        try:
+            turn = await rollout.run_turn(ids, max_tokens=32, sampling=None)
+            return turn.tokens, turn.logprobs
+        finally:
+            rollout.stop()
 
     return asyncio.run(run())
 
@@ -153,19 +157,19 @@ def _kinds(engine: FakeEngine) -> list[str]:
 def test_trajectory_end_releases_only_the_exact_paused_history(monkeypatch):
     monkeypatch.setenv("QWEN3_SESSION_KV", "1")
     engine = FakeEngine()
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
 
     async def run():
         try:
-            await wrapper._run_turn([1, 2], max_tokens=32, sampling=None)
-            await wrapper._run_turn([3, 4], max_tokens=32, sampling=None)
+            await wrapper.run_turn([1, 2], max_tokens=32, sampling=None)
+            await wrapper.run_turn([3, 4], max_tokens=32, sampling=None)
             assert await wrapper.finish_session([1, 2]) == 0
             assert await wrapper.finish_session([1, 2, 900, 901]) == 1
             assert await wrapper.finish_session([1, 2, 900, 901]) == 0
             assert wrapper.session_report()["live_sessions"] == 1
             assert wrapper._sessions.session_tokens(2) == [3, 4, 900, 901]
         finally:
-            wrapper._driver.stop()
+            wrapper.stop()
 
     asyncio.run(run())
 
@@ -173,16 +177,16 @@ def test_trajectory_end_releases_only_the_exact_paused_history(monkeypatch):
 def test_trajectory_end_does_not_guess_between_identical_siblings(monkeypatch):
     monkeypatch.setenv("QWEN3_SESSION_KV", "1")
     engine = FakeEngine()
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
 
     async def run():
         try:
-            await wrapper._run_turn([1, 2], max_tokens=32, sampling=None)
-            await wrapper._run_turn([1, 2], max_tokens=32, sampling=None)
+            await wrapper.run_turn([1, 2], max_tokens=32, sampling=None)
+            await wrapper.run_turn([1, 2], max_tokens=32, sampling=None)
             assert await wrapper.finish_session([1, 2, 900, 901]) == 0
             assert wrapper.session_report()["live_sessions"] == 2
         finally:
-            wrapper._driver.stop()
+            wrapper.stop()
 
     asyncio.run(run())
 
@@ -190,7 +194,7 @@ def test_trajectory_end_does_not_guess_between_identical_siblings(monkeypatch):
 def test_the_first_turn_of_a_conversation_parks_its_kv_instead_of_freeing_it(monkeypatch):
     monkeypatch.delenv("QWEN3_SESSION_KV", raising=False)
     engine = FakeEngine()
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
 
     assert _turn(wrapper, [1, 2, 3]) == [900, 901]
     assert engine.calls == [("add", [1, 2, 3], True)]
@@ -199,7 +203,7 @@ def test_the_first_turn_of_a_conversation_parks_its_kv_instead_of_freeing_it(mon
 def test_the_next_turn_resumes_and_only_submits_what_the_tool_appended(monkeypatch):
     monkeypatch.delenv("QWEN3_SESSION_KV", raising=False)
     engine = FakeEngine(completion=[900, 901])
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
 
     _turn(wrapper, [1, 2, 3])
     # Next prompt is the previous one, the model's answer, then the tool output.
@@ -213,7 +217,7 @@ def test_a_divergent_next_turn_starts_a_fresh_session_rather_than_rewinding(monk
     """Rewinding is not token-for-token equal yet, so a divergence pays in full."""
     monkeypatch.delenv("QWEN3_SESSION_KV", raising=False)
     engine = FakeEngine(completion=[900, 901])
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
 
     _turn(wrapper, list(range(100)))
     # The re-encoded history differs from what was emitted at the very end.
@@ -254,7 +258,7 @@ def test_turning_sessions_off_still_batches_but_keeps_no_kv(monkeypatch):
     """Batching is independent of reuse; turning reuse off must not serialize."""
     monkeypatch.setenv("QWEN3_SESSION_KV", "0")
     engine = FakeEngine()
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
 
     _turn(wrapper, [1, 2, 3])
     _turn(wrapper, [1, 2, 3, 900, 901, 7])
@@ -270,26 +274,26 @@ def test_concurrent_turns_reach_the_engine_together_instead_of_queueing(monkeypa
     """The point of the driver: four trajectories, one decode step, not four."""
     monkeypatch.delenv("QWEN3_BATCHING", raising=False)
     engine = FakeEngine(completion=[900, 901, 902])
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
 
     async def run():
         # Queue arrivals before starting the worker: batching must not depend
         # on the OS letting the event loop outrun a zero-cost fake decode step.
         start_driver = wrapper._driver.start
         monkeypatch.setattr(wrapper._driver, "start", lambda: None)
-        turns = [asyncio.create_task(wrapper._run_turn([i, i + 1], max_tokens=32, sampling=None)) for i in range(4)]
+        turns = [asyncio.create_task(wrapper.run_turn([i, i + 1], max_tokens=32, sampling=None)) for i in range(4)]
         await asyncio.sleep(0)
         start_driver()
         try:
             return await asyncio.wait_for(asyncio.gather(*turns), timeout=5)
         finally:
-            wrapper._driver.stop()
+            wrapper.stop()
 
     results = asyncio.run(run())
 
-    assert [tokens for tokens, _ in results] == [[900, 901, 902]] * 4
+    assert [turn.tokens for turn in results] == [[900, 901, 902]] * 4
     assert engine.batch_sizes == [4, 4, 4]
-    assert wrapper._driver.report()["max_batch"] == 4
+    assert wrapper.batching_report()["max_batch"] == 4
 
 
 def test_the_control_arm_admits_one_turn_at_a_time(monkeypatch):
@@ -300,18 +304,18 @@ def test_the_control_arm_admits_one_turn_at_a_time(monkeypatch):
     """
     monkeypatch.setenv("QWEN3_BATCHING", "0")
     engine = FakeEngine(completion=[900, 901, 902])
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
 
     async def run():
         results = await asyncio.gather(
-            *(wrapper._run_turn([i, i + 1], max_tokens=32, sampling=None) for i in range(4))
+            *(wrapper.run_turn([i, i + 1], max_tokens=32, sampling=None) for i in range(4))
         )
-        wrapper._driver.stop()
+        wrapper.stop()
         return results
 
     results = asyncio.run(run())
 
-    assert [tokens for tokens, _ in results] == [[900, 901, 902]] * 4
+    assert [turn.tokens for turn in results] == [[900, 901, 902]] * 4
     assert set(engine.batch_sizes) == {1}
     assert len(engine.batch_sizes) == 12  # every token its own pass over the weights
 
@@ -371,17 +375,17 @@ def test_stopping_driver_resolves_deferred_admission():
 
 def test_each_turn_gets_its_own_logprobs_and_not_a_neighbours():
     engine = FakeEngine(completion=[900, 901])
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
 
     async def run():
         results = await asyncio.gather(
-            *(wrapper._run_turn([i], max_tokens=32, sampling=None) for i in range(3))
+            *(wrapper.run_turn([i], max_tokens=32, sampling=None) for i in range(3))
         )
-        wrapper._driver.stop()
+        wrapper.stop()
         return results
 
-    for tokens, logprobs in asyncio.run(run()):
-        assert len(logprobs) == len(tokens) == 2
+    for turn in asyncio.run(run()):
+        assert len(turn.logprobs) == len(turn.tokens) == 2
 
 
 def test_a_multi_token_step_carries_a_logprob_for_every_token():
@@ -394,7 +398,7 @@ def test_a_multi_token_step_carries_a_logprob_for_every_token():
     """
     engine = FakeEngine(completion=[900, 901, 902, 903])
     engine.tokens_per_step = 2
-    tokens, logprobs = _turn_with_logprobs(Qwen3InferenceEngine(engine), [1, 2, 3])
+    tokens, logprobs = _turn_with_logprobs(SessionRollout(engine), [1, 2, 3])
     assert tokens == [900, 901, 902, 903]
     assert logprobs == [-0.5, -0.6, -0.5, -0.6]
 
@@ -413,7 +417,7 @@ def test_an_unscored_token_is_refused_instead_of_served_as_a_policy_sample():
 def test_a_full_pool_gives_the_parked_kv_back_rather_than_failing_the_step(monkeypatch):
     monkeypatch.delenv("QWEN3_SESSION_KV", raising=False)
     engine = FakeEngine()
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
     _turn(wrapper, [1, 2, 3])
     engine.fail_step_once = True
 
@@ -429,7 +433,7 @@ def test_an_unrelated_failure_is_not_swallowed_by_the_retry(monkeypatch):
         def step(self):
             raise RuntimeError("model runner exploded")
 
-    wrapper = Qwen3InferenceEngine(Broken())
+    wrapper = SessionRollout(Broken())
 
     try:
         _turn(wrapper, [1, 2, 3])
@@ -440,11 +444,11 @@ def test_an_unrelated_failure_is_not_swallowed_by_the_retry(monkeypatch):
 
 
 def test_parked_kv_budget_is_counted_in_blocks_not_tokens():
-    from qwen3_runtime.integrations.skyrl.inference_engine import _parked_kv_budget
+    from qwen3_runtime.rollout.execution import _parked_kv_budget
 
     engine = FakeEngine()
     assert _parked_kv_budget(engine) == int(0.45 * 1000)
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
     assert wrapper._sessions.max_blocks == int(0.45 * 1000)
     assert "held_blocks" in wrapper.session_report()
 
@@ -452,9 +456,41 @@ def test_parked_kv_budget_is_counted_in_blocks_not_tokens():
 def test_a_tight_free_list_evicts_the_oldest_parked_session(monkeypatch):
     monkeypatch.delenv("QWEN3_SESSION_KV", raising=False)
     engine = FakeEngine()
-    wrapper = Qwen3InferenceEngine(engine)
+    wrapper = SessionRollout(engine)
     _turn(wrapper, [1, 2, 3])
     engine.block_manager.num_free_blocks = 5  # 10% of 1000 is 100
     _turn(wrapper, [1, 2, 3, 900, 901, 50])
     assert "finish" in _kinds(engine)
     assert wrapper.session_report()["evicted"] >= 1
+
+
+def test_failed_resume_keeps_the_session_claimable_without_counting_a_turn(monkeypatch):
+    engine = FakeEngine()
+    rollout = SessionRollout(engine, enabled=True)
+
+    async def run():
+        try:
+            first = await rollout.run_turn([1, 2], max_tokens=2, sampling=None)
+            before = rollout.session_report()
+            history = [1, 2, *first.tokens, 3]
+            original = engine.resume_request
+
+            def fail(*args, **kwargs):
+                raise ValueError("injected resume failure")
+
+            monkeypatch.setattr(engine, "resume_request", fail)
+            with pytest.raises(ValueError, match="injected resume failure"):
+                await rollout.run_turn(history, max_tokens=2, sampling=None)
+            assert rollout.session_report() == before
+            monkeypatch.setattr(engine, "resume_request", original)
+            resumed = await rollout.run_turn(history, max_tokens=2, sampling=None)
+            assert resumed.request_id == first.request_id
+            assert resumed.tokens == first.tokens
+            report = rollout.session_report()
+            assert report["turns"] == 2
+            assert report["started"] == report["resumed"] == 1
+            assert report["tokens_reused"] == 4
+        finally:
+            rollout.clear()
+
+    asyncio.run(run())
