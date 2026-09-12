@@ -16,7 +16,16 @@ from matplotlib.lines import Line2D
 
 GIB = 1024 ** 3
 COLORS = {"B11": "#64748B", "apc-only": "#6366F1", "O-sync": "#0D9488"}
-LABELS = {"B11": "GPU sessions", "apc-only": "GPU APC", "O-sync": "CPU offload"}
+
+def arm_label(settings):
+    if not settings["session_kv"]:
+        return "APC only"
+    label = "Session KV"
+    if settings["apc"]:
+        label += " + APC"
+    if settings["cpu_offload"] == "sync":
+        label += "\n+ CPU offload"
+    return label
 
 
 def main():
@@ -39,6 +48,8 @@ def main():
     def save(fig, name):
         fig.savefig(out / f"{name}.png", dpi=180, facecolor="white")
         fig.savefig(out / f"{name}.svg", metadata={"Date": None}, facecolor="white")
+        svg = out / f"{name}.svg"
+        svg.write_text("\n".join(line.rstrip() for line in svg.read_text().splitlines()) + "\n")
         plt.close(fig)
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 6.4))
@@ -67,7 +78,7 @@ def main():
             ax.scatter(warm, [i-.12, i, i+.12], s=21, c="#172B4D", zorder=3)
             ax.scatter(cold, [i], marker="D", s=46, facecolors="white", edgecolors="#172B4D", zorder=4)
             ax.text(max(warm + cold) + 1.8, i, f"{median:.2f} s", va="center", fontsize=10, fontweight="bold")
-        ax.set_yticks(range(len(arms)), [LABELS[a] for a in arms])
+        ax.set_yticks(range(len(arms)), [arm_label(case["arm_configuration"][a]) for a in arms], fontsize=10)
         ax.set_ylim(len(arms)-.4, -.7)
         ax.set_xlim(0, 120)
         ax.set_xticks([0, 30, 60, 90, 120])
@@ -120,6 +131,7 @@ def main():
         "source": "bench/results/session-cpu-offload/observations.json",
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
         "boundary": chart_data, "engineering": engineering,
+        "arm_configuration": {name: cases[name]["arm_configuration"] for name in chart_data},
         "note": "Bar medians and individual samples; no confidence interval or cross-engine speed claim."
     }, indent=2) + "\n")
     print("Generated two offload figures and their numeric provenance")

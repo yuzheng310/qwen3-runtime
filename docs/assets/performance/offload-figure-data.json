@@ -1,6 +1,6 @@
 {
   "source": "bench/results/session-cpu-offload/observations.json",
-  "source_sha256": "74760e2e053693e9855cb2bd1e2849be9e0968625489fade389b7c38a0200248",
+  "source_sha256": "38cde9c22f3e662b3f64c090a5a90da2d444bb0e2c9cc55a81b113af85e5713c",
   "boundary": {
     "default4-finished": {
       "B11": {
@@ -143,5 +143,53 @@
       "unit": "GiB written per replay"
     }
   ],
+  "arm_configuration": {
+    "default4-finished": {
+      "B11": {
+        "session_kv": true,
+        "apc": false,
+        "cpu_offload": "off"
+      },
+      "O-sync": {
+        "session_kv": true,
+        "apc": false,
+        "cpu_offload": "sync"
+      }
+    },
+    "fixed24": {
+      "B11": {
+        "session_kv": true,
+        "apc": true,
+        "cpu_offload": "off"
+      },
+      "O-sync": {
+        "session_kv": true,
+        "apc": true,
+        "cpu_offload": "sync"
+      },
+      "apc-only": {
+        "session_kv": false,
+        "apc": true,
+        "cpu_offload": "off"
+      }
+    },
+    "automatic24": {
+      "B11": {
+        "session_kv": true,
+        "apc": true,
+        "cpu_offload": "off"
+      },
+      "O-sync": {
+        "session_kv": true,
+        "apc": true,
+        "cpu_offload": "sync"
+      },
+      "apc-only": {
+        "session_kv": false,
+        "apc": true,
+        "cpu_offload": "off"
+      }
+    }
+  },
   "note": "Bar medians and individual samples; no confidence interval or cross-engine speed claim."
 }

@@ -53,7 +53,23 @@ The table reports medians, not full GRPO steps or numerical-correctness evidence
 |---|---:|---:|---|
 | 4 clients, completed sessions released, 26.40 GiB pool | 90.171 s | 90.091 s | 0.09% difference, below observed variation; no CPU saves or restores |
 | 24 clients / 8 active, fixed 26.40 GiB pool | 66.798 s (APC-only) | 58.950 s | 11.75% less elapsed time; 31.44% fewer prefill tokens |
-| 24 clients / 8 active, automatic 33.47 GiB pool | 54.533 s (GPU sessions) | 54.436 s | 0.18% difference; no CPU saves or restores |
+| 24 clients / 8 active, automatic 33.47 GiB pool | 54.533 s (Session KV + APC) | 54.436 s | 0.18% difference; no CPU saves or restores |
+
+The CPU arm in both 24-client cases is **Session KV + APC + CPU offload**.
+It was not tested without session continuation. The recorded arm mapping is:
+
+| Arm | Session KV | APC | CPU offload | Fixed-pool median | Automatic-pool median |
+|---|---|---|---|---:|---:|
+| `B11` | On | On | Off | 78.437 s | 54.533 s |
+| `apc-only` | Off | On | Off | 66.798 s | 55.116 s |
+| `O-sync` | On | On | Synchronous | 58.950 s | 54.436 s |
+
+Thus adding offload to Session KV + APC reduced fixed-pool time by **24.84%**.
+The headline **11.75%** uses the faster GPU control, APC-only. These results
+support a conditional benefit of the combined design, not universal superiority.
+The published per-case `arm_configuration` includes APC/offload flags from the
+archived engine configuration; session enablement is derived from the replay
+helper's arm mapping and cross-checked against recorded session counters.
 
 The 24-client comparisons use APC enabled, equal GPU parking budgets, spec=0,
 2,048 batch-token budget, 16-token blocks, 32 MiB transfer chunks, and a 32 GiB

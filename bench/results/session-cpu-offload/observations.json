@@ -94,6 +94,19 @@
           ]
         }
       },
+      "arm_configuration": {
+        "B11": {
+          "session_kv": true,
+          "apc": false,
+          "cpu_offload": "off"
+        },
+        "O-sync": {
+          "session_kv": true,
+          "apc": false,
+          "cpu_offload": "sync"
+        }
+      },
+      "arm_configuration_provenance": "APC and CPU-offload flags copied from each archived engine_config and checked across repetitions. Session KV follows replay's arm switch and is cross-checked against recorded session-turn counters.",
       "runs": [
         {
           "arm": "B11",
@@ -854,6 +867,19 @@
           ]
         }
       },
+      "arm_configuration": {
+        "B11": {
+          "session_kv": true,
+          "apc": false,
+          "cpu_offload": "off"
+        },
+        "O-sync": {
+          "session_kv": true,
+          "apc": false,
+          "cpu_offload": "sync"
+        }
+      },
+      "arm_configuration_provenance": "APC and CPU-offload flags copied from each archived engine_config and checked across repetitions. Session KV follows replay's arm switch and is cross-checked against recorded session-turn counters.",
       "runs": [
         {
           "arm": "B11",
@@ -1637,6 +1663,24 @@
           ]
         }
       },
+      "arm_configuration": {
+        "B11": {
+          "session_kv": true,
+          "apc": true,
+          "cpu_offload": "off"
+        },
+        "O-sync": {
+          "session_kv": true,
+          "apc": true,
+          "cpu_offload": "sync"
+        },
+        "apc-only": {
+          "session_kv": false,
+          "apc": true,
+          "cpu_offload": "off"
+        }
+      },
+      "arm_configuration_provenance": "APC and CPU-offload flags copied from each archived engine_config and checked across repetitions. Session KV follows replay's arm switch and is cross-checked against recorded session-turn counters.",
       "runs": [
         {
           "arm": "B11",
@@ -2744,6 +2788,24 @@
           ]
         }
       },
+      "arm_configuration": {
+        "B11": {
+          "session_kv": true,
+          "apc": true,
+          "cpu_offload": "off"
+        },
+        "O-sync": {
+          "session_kv": true,
+          "apc": true,
+          "cpu_offload": "sync"
+        },
+        "apc-only": {
+          "session_kv": false,
+          "apc": true,
+          "cpu_offload": "off"
+        }
+      },
+      "arm_configuration_provenance": "APC and CPU-offload flags copied from each archived engine_config and checked across repetitions. Session KV follows replay's arm switch and is cross-checked against recorded session-turn counters.",
       "runs": [
         {
           "arm": "B11",

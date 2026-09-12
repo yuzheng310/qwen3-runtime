@@ -55,9 +55,23 @@ scheduling, state management, and integration code.
 ![CPU offload across three capacity and concurrency conditions](docs/assets/performance/offload-boundary.png)
 
 **11.75% less replay time and 31.44% fewer prefill tokens under fixed-capacity
-pressure.** With 24 clients and a 26.40 GiB GPU KV pool, synchronous CPU offload
-completed in **58.95 s**, versus **66.80 s** for the faster GPU control (APC).
+pressure.** With 24 clients and a 26.40 GiB GPU KV pool, **Session KV + APC +
+synchronous CPU offload** completed in **58.95 s**, versus **66.80 s** for the faster GPU control (APC).
 All three controls, individual warm runs and first-use passes appear above.
+
+The 24-client experiment already tests the three mechanisms together:
+
+| Recorded arm | Session KV | APC | CPU offload | Fixed-pool median |
+|---|---|---|---|---:|
+| `B11` | On | On | Off | 78.44 s |
+| `apc-only` | Off | On | Off | 66.80 s |
+| `O-sync` | On | On | Synchronous | **58.95 s** |
+
+Adding offload to **Session KV + APC** reduced time by **24.84%**; the headline
+uses the stronger APC-only control, giving **11.75%**. This is a combined session
+cache experiment, not offload in isolation. The 4-client diagnostic has APC off;
+its arm labels therefore differ. Per-case configuration is recorded in the data.
+
 With 4 clients and completion cleanup, or a larger 33.47 GiB GPU pool, no CPU
 copies were needed and there was **no credible offload speedup**.
 
