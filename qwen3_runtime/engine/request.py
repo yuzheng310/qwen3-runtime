@@ -65,6 +65,11 @@ class Request:
         self.spec_draft_len = 0
         self.spec_teacher_force = False
         self.kv_epoch = 0
+        # GPU/CPU residency is separate from RequestStatus.PAUSED.  A CPU
+        # resident request remains matchable but is never schedulable until a
+        # restore transaction rebuilds its GPU table.
+        self.kv_residency = "none"
+        self.offload_snapshot_id: int | None = None
         self.last_logprob: float | None = None
         self.logprobs: list[float] = []
         self.top_logprobs: list[list[tuple[int, float]]] = []
@@ -122,3 +127,5 @@ class Request:
         self.cached_tokens = 0
         self.n_published_blocks = 0
         self.ngram_index = None
+        self.kv_residency = "none"
+        self.offload_snapshot_id = None

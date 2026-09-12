@@ -70,6 +70,156 @@ class PagedKVPool:
             return
         self.cache[:, :, dst].copy_(self.cache[:, :, src])
 
+    @property
+    def block_bytes(self) -> int:
+        """Bytes in one physical block, including K and V for every layer."""
+        return (
+            2
+            * self.num_layers
+            * self.block_size
+            * self.num_kv_heads
+            * self.head_dim
+            * self.cache.element_size()
+        )
+
+    def export_blocks(
+        self,
+        block_ids: Sequence[int],
+        *,
+        valid_tokens: int,
+        chunk_bytes: int,
+        destination: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Copy logical blocks to CPU in bounded staging chunks.
+
+        ``block_ids`` is the logical order of a request's block table.  The
+        returned tensor is self-contained and keeps the pool dtype.  Padding
+        after ``valid_tokens`` is zeroed so it can never be mistaken for valid
+        KV after a later restore.
+        """
+        ids = [int(block_id) for block_id in block_ids]
+        if any(block_id < 0 or block_id >= self.num_blocks for block_id in ids):
+            raise ValueError("block id outside the KV pool")
+        if valid_tokens < 0 or valid_tokens > len(ids) * self.block_size:
+            raise ValueError("valid_tokens does not fit the supplied block table")
+        shape = (
+            2,
+            self.num_layers,
+            len(ids),
+            self.block_size,
+            self.num_kv_heads,
+            self.head_dim,
+        )
+        if destination is None:
+            destination = torch.empty(
+                (
+                    len(ids),
+                    2,
+                    self.num_layers,
+                    self.block_size,
+                    self.num_kv_heads,
+                    self.head_dim,
+                ),
+                dtype=self.cache.dtype,
+                device="cpu",
+            ).permute(1, 2, 0, 3, 4, 5)
+        if tuple(destination.shape) != shape or destination.dtype != self.cache.dtype:
+            raise ValueError("destination has the wrong KV snapshot layout")
+        if destination.device.type != "cpu":
+            raise ValueError("KV snapshots must be stored on CPU")
+        if not ids:
+            return destination
+        per_block = max(1, self.block_bytes)
+        blocks_per_chunk = max(1, chunk_bytes // per_block)
+        device_blocks = self.cache.permute(2, 0, 1, 3, 4, 5)
+        host_blocks = destination.permute(2, 0, 1, 3, 4, 5)
+        indices = torch.tensor(ids, dtype=torch.long, device=self.cache.device)
+        staging = torch.empty(
+            (min(blocks_per_chunk, len(ids)), *device_blocks.shape[1:]),
+            dtype=self.cache.dtype,
+            device=self.cache.device,
+        )
+        async_copy = (
+            self.cache.is_cuda
+            and destination.is_pinned()
+            and host_blocks.is_contiguous()
+        )
+        try:
+            for start in range(0, len(ids), blocks_per_chunk):
+                end = min(len(ids), start + blocks_per_chunk)
+                chunk = staging[: end - start]
+                torch.index_select(device_blocks, 0, indices[start:end], out=chunk)
+                host_blocks[start:end].copy_(chunk, non_blocking=async_copy)
+        finally:
+            # This API remains synchronous: host ownership is committed only
+            # after every copy completes, including when a later chunk fails.
+            if async_copy:
+                torch.cuda.current_stream(self.cache.device).synchronize()
+        if valid_tokens == 0:
+            destination.zero_()
+        else:
+            tail = valid_tokens % self.block_size
+            if tail:
+                destination[:, :, -1, tail:].zero_()
+        return destination
+
+    def import_blocks(
+        self,
+        block_ids: Sequence[int],
+        source: torch.Tensor,
+        *,
+        valid_tokens: int,
+        chunk_bytes: int,
+        source_block_offset: int = 0,
+    ) -> None:
+        """Write CPU snapshot blocks into physical pool blocks in chunks."""
+        ids = [int(block_id) for block_id in block_ids]
+        if (
+            source.ndim != 6
+            or source.dtype != self.cache.dtype
+            or source.device.type != "cpu"
+        ):
+            raise ValueError("source has the wrong KV snapshot layout")
+        if source.shape[0] != 2 or source.shape[1] != self.num_layers:
+            raise ValueError("source has the wrong KV layer layout")
+        if source.shape[3:] != (self.block_size, self.num_kv_heads, self.head_dim):
+            raise ValueError("source has the wrong KV block layout")
+        if source_block_offset < 0 or source_block_offset + len(ids) > source.shape[2]:
+            raise ValueError("source block range is outside the snapshot")
+        if any(block_id < 0 or block_id >= self.num_blocks for block_id in ids):
+            raise ValueError("block id outside the KV pool")
+        if valid_tokens < 0 or valid_tokens > source.shape[2] * self.block_size:
+            raise ValueError("valid_tokens does not fit the source snapshot")
+        per_block = max(1, self.block_bytes)
+        blocks_per_chunk = max(1, chunk_bytes // per_block)
+        if not ids:
+            return
+        device_blocks = self.cache.permute(2, 0, 1, 3, 4, 5)
+        host_blocks = source.permute(2, 0, 1, 3, 4, 5)
+        indices = torch.tensor(ids, dtype=torch.long, device=self.cache.device)
+        staging = torch.empty(
+            (min(blocks_per_chunk, len(ids)), *device_blocks.shape[1:]),
+            dtype=self.cache.dtype,
+            device=self.cache.device,
+        )
+        async_copy = (
+            self.cache.is_cuda and source.is_pinned() and host_blocks.is_contiguous()
+        )
+        try:
+            for start in range(0, len(ids), blocks_per_chunk):
+                end = min(len(ids), start + blocks_per_chunk)
+                chunk = staging[: end - start]
+                chunk.copy_(
+                    host_blocks[
+                        source_block_offset + start : source_block_offset + end
+                    ],
+                    non_blocking=async_copy,
+                )
+                device_blocks.index_copy_(0, indices[start:end], chunk)
+        finally:
+            if async_copy:
+                torch.cuda.current_stream(self.cache.device).synchronize()
+
     def gather(
         self,
         layer: int,

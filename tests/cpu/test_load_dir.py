@@ -85,3 +85,30 @@ def test_load_from_directory_reads_sharded_index(tmp_path):
     pos = torch.arange(ids.numel())
     with torch.no_grad():
         torch.testing.assert_close(loaded(ids, pos), original(ids, pos), atol=1e-5, rtol=1e-5)
+
+
+def test_target_dtype_avoids_full_precision_device_transfer(tmp_path, monkeypatch):
+    """Measure bytes crossing the device boundary, emulated on CPU."""
+    original = Qwen3ForCausalLM(tiny_config()).eval()
+    (tmp_path / "config.json").write_text(json.dumps(_tiny_hf_config()))
+    save_file(dump_hf_state_dict(original), str(tmp_path / "model.safetensors"))
+    real_to = Qwen3ForCausalLM.to
+    transferred = []
+
+    def inspect_to(self, *args, **kwargs):
+        if kwargs.get("device") == "cuda":
+            dtype = kwargs.get("dtype")
+            transferred.append(sum(
+                p.numel() * (torch.empty((), dtype=dtype).element_size()
+                             if dtype is not None else p.element_size())
+                for p in self.parameters()
+            ))
+            kwargs = {**kwargs, "device": "cpu"}
+        return real_to(self, *args, **kwargs)
+
+    monkeypatch.setattr(Qwen3ForCausalLM, "to", inspect_to)
+    loaded = load_from_directory(tmp_path, device="cuda", dtype=torch.bfloat16)
+    expected_bytes = sum(p.numel() * 2 for p in original.parameters())
+    assert transferred == [expected_bytes]
+    for actual, expected in zip(loaded.parameters(), original.parameters()):
+        assert torch.equal(actual, expected.to(torch.bfloat16))

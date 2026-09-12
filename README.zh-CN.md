@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="许可证" src="https://img.shields.io/badge/license-Apache--2.0-4C8BF5?style=flat-square"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"></a>
   <a href="docs/pins/Qwen3-4B/config.json"><img alt="模型" src="https://img.shields.io/badge/model-Qwen3-7C3AED?style=flat-square"></a>
-  <a href="TEST_RESULTS.md"><img alt="测试" src="https://img.shields.io/badge/tests-327%20passed-2EA44F?style=flat-square"></a>
+  <a href="TEST_RESULTS.md"><img alt="测试" src="https://img.shields.io/badge/tests-362%20passed-2EA44F?style=flat-square"></a>
 </p>
 
 <p>
@@ -36,6 +36,7 @@
 | 能力 | 实现方式 |
 |---|---|
 | 跨轮次保留 KV | 生成后暂停 session，复用精确的 token 前缀，仅 prefill 新增后缀；历史不一致时重新计算。 |
+| 可选 CPU KV | 对暂停 session 使用有界同步快照，检查版本、处理容量不足，并支持显式结束清理；默认关闭。 |
 | 并发 rollout | 统一 engine driver 接收异步请求，通过 continuous batching、chunked prefill、Paged KV 与内存感知调度执行。 |
 | 采样与 logprob | 支持 temperature、top-k/top-p/min-p、penalty、带 seed 的采样与逐 token logprob；rollout 输出保持 token 和 logprob 数量一致。 |
 | 推测解码 | 由目标模型验证 n-gram 候选，回滚未接受部分的 KV。 |
@@ -45,6 +46,18 @@
 <a id="rollout-results"></a>
 
 ## Rollout 机制带来的实际变化
+
+### 可选 CPU KV offload：收益取决于容量压力
+
+三次重复的固定 token 回放中，24 个客户端共享 **26.40 GiB** KV 池时，CPU offload
+耗时 **58.95 s**，同配置较快的 GPU 对照（纯 APC）为 **66.80 s**：耗时降低
+**11.75%**，prefill 减少 **31.44%**。4 并发并清理结束轨迹后，或把 GPU 池扩大到
+33.47 GiB 后，两组都不需要 CPU 搬运，时间差异不足 0.2%。
+
+CPU offload 保持**默认关闭**。目标精度加载使实测加载峰值从 15.87 降至 7.61 GiB，
+释放的容量同样属于 GPU 基线的收益。这些是带源码摘要、合成工具等待的探索性回放，
+**不是新一轮完整 GRPO 训练结果**。
+[配置方式、逐次数据与结论边界](SESSION_CPU_OFFLOAD.md)。
 
 ### Session KV 与 APC：四组对照说明了什么
 
@@ -262,11 +275,11 @@ workload 的优化空间，不是实测加速比或保证的缓存命中率。�
 
 ## 验证与限制
 
-最近一次[测试记录](TEST_RESULTS.md)：CPU 上 **327 通过、18 跳过**，wheel 与源码
-包构建成功，并发 batch 回归连续 30 次通过。测试覆盖 session 隔离、权重更新时
-释放状态、token/logprob 对齐、采样与 speculative commit/rollback。
-跳过项依赖可选 GPU、模型、后端或 replay token 资源。本次快照未重跑 GPU 性能
-测试和完整 SkyRL 训练。
+最近一次[测试记录](TEST_RESULTS.md)：CPU 上 **362 通过、24 跳过**，wheel 与源码
+包构建成功。测试覆盖 session 隔离、CPU KV 保存/恢复与容量处理、显式结束清理、
+权重失效、token/logprob 对齐、采样与 speculative commit/rollback。
+跳过项依赖可选 GPU、模型、后端或 replay token 资源。独立的
+[GPU offload 验证](SESSION_CPU_OFFLOAD.md) 按实际范围记录；未宣称新的完整 GRPO 训练收益。
 
 ## 仓库导航
 

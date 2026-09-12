@@ -223,6 +223,12 @@ def sleep_engine(engine: Any, level: int = 1) -> dict[str, int | None]:
     still exists for a caller that is genuinely out of room.
     """
     del level
+    # Sleep is a full KV invalidation boundary.  A CPU snapshot cannot
+    # survive a pool rebuild because its physical layout/epoch is no longer
+    # authoritative, even if the weights themselves remain resident.
+    invalidate = getattr(engine, "invalidate_all_kv", None)
+    if invalidate is not None:
+        invalidate()
     park_live_sessions(engine)
     engine.block_manager.reset()
     engine.runner.release_kv_pool()
@@ -256,9 +262,17 @@ def wake_engine(engine: Any, tags: object | None = None) -> None:
 def abort_generation(engine: Any) -> list[int]:
     aborted: list[int] = []
     targets = list(engine.scheduler.waiting) + list(engine.scheduler.running)
+    targets += [
+        req
+        for req in engine.scheduler.paused.values()
+        if getattr(req, "kv_residency", "none") == "cpu"
+    ]
     for req in targets:
         rid = req.request_id
         req.finish_reason = "abort"
+        offload = getattr(engine, "session_offload", None)
+        if offload is not None:
+            offload.remove(rid)
         engine.scheduler.release(req)
         engine._requests.pop(rid, None)
         aborted.append(rid)

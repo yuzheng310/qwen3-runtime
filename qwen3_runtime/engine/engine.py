@@ -7,6 +7,7 @@ from qwen3_runtime.engine.block_manager import BlockManager
 from qwen3_runtime.engine.request import Request, RequestStatus
 from qwen3_runtime.engine.runner import ModelRunner
 from qwen3_runtime.engine.scheduler import Scheduler
+from qwen3_runtime.engine.session_offload import SessionOffloadManager
 from qwen3_runtime.sampling import SamplingParams
 from qwen3_runtime.spec_decode import commit_spec, verify_request
 
@@ -35,6 +36,7 @@ class Engine:
         self._asleep = False
         self.last_sleep_memory: dict | None = None
         self.last_aborted_ids: list[int] = []
+        self.session_offload = SessionOffloadManager(self)
 
     def add_request(
         self,
@@ -88,27 +90,37 @@ class Engine:
         req = self._requests[request_id]
         if self._asleep:
             raise RuntimeError("engine is asleep; wake_up() before resume_request")
+        restore_ticket = None
+        if req.kv_residency == "cpu":
+            restore_ticket = self.session_offload.begin_restore(req)
         if req.block_table:
             stale_epoch = req.kv_epoch != self.block_manager.epoch
             if stale_epoch or req.num_computed_tokens == 0:
                 raise RuntimeError(
                     f"resume of request {request_id} has a block table after KV invalidation"
                 )
-        self.scheduler.resume(
-            req,
-            suffix,
-            max_tokens,
-            hold_kv=hold_kv,
-            sampling=sampling,
-            ignore_eos=ignore_eos,
-            stop_token_ids=stop_token_ids,
-            forced_tokens=forced_tokens,
-        )
+        try:
+            self.scheduler.resume(
+                req,
+                suffix,
+                max_tokens,
+                hold_kv=hold_kv,
+                sampling=sampling,
+                ignore_eos=ignore_eos,
+                stop_token_ids=stop_token_ids,
+                forced_tokens=forced_tokens,
+            )
+        except BaseException:
+            self.session_offload.rollback_restore(req, restore_ticket)
+            raise
+        if restore_ticket is not None:
+            self.session_offload.commit_restore(restore_ticket)
 
     def finish_request(self, request_id: int) -> None:
         req = self._requests.get(request_id)
         if req is None:
             return
+        self.session_offload.remove(request_id)
         self.scheduler.release(req)
         self._requests.pop(request_id, None)
 
@@ -141,6 +153,11 @@ class Engine:
             "attention_backend": cfg.attention_backend,
             "cuda_graph": cfg.cuda_graph,
             "eos_token_id": cfg.eos_token_id,
+            "session_cpu_offload": cfg.session_cpu_offload,
+            "cpu_kv_max_bytes": cfg.cpu_kv_max_bytes,
+            "cpu_kv_pinned_max_bytes": cfg.cpu_kv_pinned_max_bytes,
+            "transfer_chunk_bytes": cfg.transfer_chunk_bytes,
+            "session_offload": self.session_offload.report(),
         }
 
     def stream_request(self, request_id: int):
@@ -298,10 +315,21 @@ class Engine:
 
     def invalidate_all_kv(self) -> None:
         """Drop every block. Held sessions become empty-KV restarts, never stale tables."""
+        self.session_offload.invalidate_all()
         for req in list(self._requests.values()):
             self.block_manager.deallocate(req)
             req.reset_kv_state()
         self.block_manager.reset()
+
+    def offload_request(self, request_id: int, *, session_key: str | None = None) -> None:
+        """Synchronously save one paused request and release its physical blocks."""
+        req = self._requests.get(request_id)
+        if req is None:
+            raise KeyError(request_id)
+        self.session_offload.save(req, session_key=session_key or str(request_id))
+
+    def has_cpu_snapshot(self, request_id: int) -> bool:
+        return self.session_offload.has_snapshot(request_id)
 
     def snapshot_cuda_memory(self) -> dict[str, int | None]:
         from qwen3_runtime.rollout.lifecycle import snapshot_cuda_memory
@@ -326,11 +354,18 @@ class Engine:
     ) -> list[str]:
         from qwen3_runtime.rollout.lifecycle import apply_named_weights, park_live_sessions
 
+        if invalidate_kv:
+            # Invalidate before the first parameter write.  If the update
+            # fails halfway through, no old snapshot can be admitted against
+            # a mixed model; the engine stays a cold-KV engine.
+            self.session_offload.invalidate_all(weight_change=True)
+            for req in list(self._requests.values()):
+                self.block_manager.deallocate(req)
+                req.reset_kv_state()
+            self.block_manager.reset()
         applied = apply_named_weights(self.runner.model, items)
         if invalidate_kv:
-            self.invalidate_all_kv()
             park_live_sessions(self)
-            self.block_manager.reset()
         return applied
 
     def abort_generation(self) -> list[int]:

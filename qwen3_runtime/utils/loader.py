@@ -96,7 +96,7 @@ def load_from_directory(
     cfg = Qwen3ModelConfig.from_hf_config(raw)
     model = Qwen3ForCausalLM(cfg, attention_backend=attention_backend)
     load_hf_state_dict(model, _load_tensors(path))
-    model = model.to(device=device)
-    if dtype is not None:
-        model = model.to(dtype=dtype)
+    # Convert while moving, so BF16 inference never stages a full FP32 model
+    # on the accelerator before the factory measures its remaining capacity.
+    model = model.to(device=device, dtype=dtype)
     return model.eval()

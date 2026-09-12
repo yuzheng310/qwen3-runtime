@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-4C8BF5?style=flat-square"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"></a>
   <a href="docs/pins/Qwen3-4B/config.json"><img alt="Model" src="https://img.shields.io/badge/model-Qwen3-7C3AED?style=flat-square"></a>
-  <a href="TEST_RESULTS.md"><img alt="Tests" src="https://img.shields.io/badge/tests-327%20passed-2EA44F?style=flat-square"></a>
+  <a href="TEST_RESULTS.md"><img alt="Tests" src="https://img.shields.io/badge/tests-362%20passed-2EA44F?style=flat-square"></a>
 </p>
 
 <p>
@@ -39,6 +39,7 @@ scheduling, state management, and integration code.
 | Capability | Implementation |
 |---|---|
 | Persistent session KV | Pause between turns; reuse exact token prefixes and prefill the appended suffix. Divergent histories restart instead of reusing incompatible state. |
+| Optional CPU KV | Bounded synchronous snapshots for paused sessions; version checks, capacity fallback, and explicit completion cleanup. Disabled by default. |
 | Concurrent rollouts | A shared engine driver admits asynchronous turns into continuous batches, with chunked prefill, paged KV, and memory-aware scheduling. |
 | Sampling and logprobs | Temperature, top-k/top-p/min-p, penalties, seeded sampling, and per-token logprobs; rollout outputs keep token and logprob lengths aligned. |
 | Speculative decoding | N-gram proposals verified by the target model, with rejected KV rolled back. |
@@ -48,6 +49,20 @@ scheduling, state management, and integration code.
 <a id="rollout-results"></a>
 
 ## What the rollout mechanisms changed
+
+### Optional CPU KV offload: a capacity-dependent result
+
+In three-repeat, fixed-token diagnostics, 24 clients sharing a **26.40 GiB** KV
+pool completed in **58.95 s** with CPU offload versus **66.80 s** for the faster
+GPU control (APC-only): **11.75% less time**, with **31.44% fewer prefill tokens**.
+At 4 clients with completed sessions released, or with a larger 33.47 GiB GPU
+pool, neither arm needed CPU transfers and timing differences were below 0.2%.
+
+CPU offload stays **opt-in**. Target-dtype loading reduced measured loading peak
+from 15.87 to 7.61 GiB; that extra capacity benefits the GPU baseline too.
+These are source-hashed exploratory replays with synthetic tool delay,
+**not new complete GRPO training results**.
+[Configuration, all repetitions, and limitations](SESSION_CPU_OFFLOAD.md).
 
 ### Session KV versus APC: four-arm diagnostics
 
@@ -290,12 +305,13 @@ corpora and model weights are not distributed.
 
 ## Verification and limits
 
-The latest [test record](TEST_RESULTS.md) reports **327 passed, 18 skipped** on
-CPU, a successful wheel/source build, and 30 repeated passes of the concurrent
-batch regression. Coverage includes session isolation, state release on weight
-updates, token/logprob alignment, sampling, and speculative commit/rollback.
+The latest [test record](TEST_RESULTS.md) reports **362 passed, 24 skipped** on
+CPU and a successful wheel/source build. Coverage includes session isolation,
+CPU KV save/restore and admission, explicit completion, weight invalidation,
+token/logprob alignment, sampling, and speculative commit/rollback.
 Skipped checks require optional GPU, model, backend, or replay-token resources.
-GPU performance and full SkyRL training were not rerun for this snapshot.
+Separate [GPU offload validation](SESSION_CPU_OFFLOAD.md) is recorded with its
+scope; no new complete GRPO training result is claimed.
 
 ## Repository map
 

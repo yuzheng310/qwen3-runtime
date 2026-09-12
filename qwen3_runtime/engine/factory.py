@@ -111,6 +111,10 @@ def build_engine(
     num_speculative_tokens: int = 0,
     ngram_min: int = 2,
     ngram_max: int = 4,
+    session_cpu_offload: str = "off",
+    cpu_kv_max_bytes: int = 0,
+    cpu_kv_pinned_max_bytes: int = 0,
+    transfer_chunk_bytes: int = 8 * 1024 * 1024,
 ) -> Engine:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if device == "cuda" else torch.float32
@@ -151,5 +155,9 @@ def build_engine(
         num_speculative_tokens=num_speculative_tokens,
         ngram_min=ngram_min,
         ngram_max=ngram_max,
+        session_cpu_offload=session_cpu_offload,
+        cpu_kv_max_bytes=cpu_kv_max_bytes,
+        cpu_kv_pinned_max_bytes=cpu_kv_pinned_max_bytes,
+        transfer_chunk_bytes=transfer_chunk_bytes,
     )
     return Engine(config, runner)

@@ -150,6 +150,43 @@ def _kinds(engine: FakeEngine) -> list[str]:
     return [call[0] for call in engine.calls]
 
 
+def test_trajectory_end_releases_only_the_exact_paused_history(monkeypatch):
+    monkeypatch.setenv("QWEN3_SESSION_KV", "1")
+    engine = FakeEngine()
+    wrapper = Qwen3InferenceEngine(engine)
+
+    async def run():
+        try:
+            await wrapper._run_turn([1, 2], max_tokens=32, sampling=None)
+            await wrapper._run_turn([3, 4], max_tokens=32, sampling=None)
+            assert await wrapper.finish_session([1, 2]) == 0
+            assert await wrapper.finish_session([1, 2, 900, 901]) == 1
+            assert await wrapper.finish_session([1, 2, 900, 901]) == 0
+            assert wrapper.session_report()["live_sessions"] == 1
+            assert wrapper._sessions.session_tokens(2) == [3, 4, 900, 901]
+        finally:
+            wrapper._driver.stop()
+
+    asyncio.run(run())
+
+
+def test_trajectory_end_does_not_guess_between_identical_siblings(monkeypatch):
+    monkeypatch.setenv("QWEN3_SESSION_KV", "1")
+    engine = FakeEngine()
+    wrapper = Qwen3InferenceEngine(engine)
+
+    async def run():
+        try:
+            await wrapper._run_turn([1, 2], max_tokens=32, sampling=None)
+            await wrapper._run_turn([1, 2], max_tokens=32, sampling=None)
+            assert await wrapper.finish_session([1, 2, 900, 901]) == 0
+            assert wrapper.session_report()["live_sessions"] == 2
+        finally:
+            wrapper._driver.stop()
+
+    asyncio.run(run())
+
+
 def test_the_first_turn_of_a_conversation_parks_its_kv_instead_of_freeing_it(monkeypatch):
     monkeypatch.delenv("QWEN3_SESSION_KV", raising=False)
     engine = FakeEngine()
@@ -277,6 +314,59 @@ def test_the_control_arm_admits_one_turn_at_a_time(monkeypatch):
     assert [tokens for tokens, _ in results] == [[900, 901, 902]] * 4
     assert set(engine.batch_sizes) == {1}
     assert len(engine.batch_sizes) == 12  # every token its own pass over the weights
+
+
+def test_deferred_admission_waits_for_capacity_without_retrying_every_decode(monkeypatch):
+    from qwen3_runtime.rollout.driver import AdmissionDeferred, EngineDriver
+
+    engine = FakeEngine(completion=list(range(20)))
+    engine.config = SimpleNamespace(max_num_seqs=2)
+    driver = EngineDriver(engine)
+    attempts = []
+
+    def admit(second=False):
+        if second:
+            attempts.append(len(engine.batch_sizes))
+            if engine.scheduler.running or engine.scheduler.waiting:
+                raise AdmissionDeferred("active request owns the capacity")
+        return engine.add_request(
+            [1], max_tokens=20, sampling=None, ignore_eos=True,
+            stop_token_ids=None, hold_kv=False,
+        )
+
+    async def run():
+        start = driver.start
+        monkeypatch.setattr(driver, "start", lambda: None)
+        first = asyncio.create_task(driver.run_turn(admit))
+        second = asyncio.create_task(driver.run_turn(lambda: admit(True)))
+        await asyncio.sleep(0)
+        start()
+        try:
+            return await asyncio.wait_for(asyncio.gather(first, second), 5)
+        finally:
+            driver.stop()
+
+    assert [turn.tokens for turn in asyncio.run(run())] == [list(range(20))] * 2
+    assert attempts == [0, 20]
+
+
+def test_stopping_driver_resolves_deferred_admission():
+    from qwen3_runtime.rollout.driver import AdmissionDeferred, EngineDriver
+
+    driver = EngineDriver(FakeEngine())
+
+    def defer():
+        raise AdmissionDeferred("no capacity yet")
+
+    async def run():
+        turn = asyncio.create_task(driver.run_turn(defer))
+        await asyncio.sleep(0)
+        driver.run_on_engine(lambda: None)
+        driver.stop()
+        with pytest.raises(RuntimeError, match="stopped before"):
+            await asyncio.wait_for(turn, 1)
+
+    asyncio.run(run())
 
 
 def test_each_turn_gets_its_own_logprobs_and_not_a_neighbours():

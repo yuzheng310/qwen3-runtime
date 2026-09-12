@@ -102,6 +102,26 @@ class BlockManager:
             self._decref(block_id)
         req.block_table.clear()
 
+    def resource_view(self) -> dict[str, int]:
+        """A physical view; logical request lengths are intentionally absent."""
+        unique = sum(refs > 0 for refs in self._ref_count)
+        cache_only = sum(
+            refs == 1 and any(cached_id == block_id for _h, cached_id in self._cache.lru_items())
+            for block_id, refs in enumerate(self._ref_count)
+        )
+        return {
+            "total_blocks": self.num_blocks,
+            "free_blocks": self.num_free_blocks,
+            "unique_allocated_blocks": unique,
+            "cache_only_blocks": cache_only,
+        }
+
+    def reclaim_cached_blocks(self, min_free: int) -> int:
+        """Reclaim only APC-owned blocks, preserving every live request ref."""
+        before = self.num_free_blocks
+        self._evict_unused(max(0, min_free - before))
+        return self.num_free_blocks - before
+
     def reset(self) -> None:
         """Forget every allocation. Caller must have deallocated live requests.
 
@@ -159,6 +179,57 @@ class BlockManager:
         req.n_published_blocks = cached // bs
         req.prefix_parent = parent
         return cached
+
+    def attach_cached_prefix_upto(
+        self, req: Request, tokens: list[int], num_tokens: int
+    ) -> int:
+        """Attach current APC full blocks to an empty restore target.
+
+        Unlike ``attach_cached_prefix`` this does not infer validity from the
+        request's full token list and never leaves a partial request table in
+        place.  It is the only APC entry point used by CPU restore.
+        """
+        if req.block_table:
+            raise RuntimeError("restore APC attach requires an empty block table")
+        if num_tokens < 0 or num_tokens > len(tokens):
+            raise ValueError("invalid restore token length")
+        req.cached_tokens = 0
+        req.n_published_blocks = 0
+        req.prefix_parent = ROOT_HASH
+        if not self.enable_prefix_cache:
+            return 0
+        parent = ROOT_HASH
+        cached = 0
+        full_blocks = num_tokens // self.block_size
+        for index in range(full_blocks):
+            block_tokens = tokens[index * self.block_size : (index + 1) * self.block_size]
+            h = block_hash(parent, block_tokens)
+            bid = self._cache.lookup(h)
+            if bid is None or self._ref_count[bid] <= 0:
+                break
+            self._incref(bid)
+            req.block_table.append(bid)
+            self._cache.touch(h)
+            parent = h
+            cached += self.block_size
+        req.num_computed_tokens = cached
+        req.cached_tokens = cached
+        req.n_published_blocks = cached // self.block_size
+        req.prefix_parent = parent
+        return cached
+
+    def allocate_restore_blocks(self, req: Request, num_blocks: int) -> list[int]:
+        """Reserve physical blocks for the missing part of a restore."""
+        if num_blocks < 0:
+            raise ValueError("num_blocks must be non-negative")
+        if num_blocks > self.num_free_blocks:
+            self._evict_unused(num_blocks - self.num_free_blocks)
+        if num_blocks > self.num_free_blocks:
+            raise RuntimeError("KV pool exhausted during CPU session restore")
+        req.kv_epoch = self.epoch
+        for _ in range(num_blocks):
+            req.block_table.append(self._alloc_block())
+        return req.block_table[-num_blocks:] if num_blocks else []
 
     def publish_full_blocks(self, req: Request) -> None:
         """Insert newly completed full blocks into the prefix cache."""

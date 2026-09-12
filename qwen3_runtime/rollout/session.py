@@ -78,6 +78,7 @@ class SessionCache:
 
     _sessions: dict[int, _Session] = field(default_factory=dict)
     _clock: int = 0
+    _claims: set[int] = field(default_factory=set)
     stats: dict[str, int] = field(
         default_factory=lambda: {
             "turns": 0,
@@ -86,6 +87,9 @@ class SessionCache:
             "tokens_prefilled": 0,
             "tokens_reused": 0,
             "evicted": 0,
+            "finished": 0,
+            "finish_missed": 0,
+            "finish_ambiguous": 0,
         }
     )
 
@@ -119,6 +123,62 @@ class SessionCache:
         self.stats["tokens_prefilled"] += len(best.suffix)
         return best
 
+    def reserve_claim(self, ids: list[int]) -> Claim | None:
+        """Find a match without deleting it; the caller must commit/rollback."""
+        self.stats["turns"] += 1
+        best: Claim | None = None
+        for session in self._sessions.values():
+            if session.request_id in self._claims:
+                continue
+            shared = _common_prefix_len(session.tokens, ids)
+            if shared >= len(ids) or shared != len(session.tokens):
+                continue
+            candidate = Claim(
+                request_id=session.request_id,
+                shared=shared,
+                held=len(session.tokens),
+                suffix=ids[shared:],
+            )
+            if best is None or candidate.shared > best.shared:
+                best = candidate
+        if best is None:
+            self.stats["started"] += 1
+            self.stats["tokens_prefilled"] += len(ids)
+            return None
+        self._claims.add(best.request_id)
+        return best
+
+    def commit_claim(self, claim: Claim) -> None:
+        if claim.request_id not in self._claims:
+            raise RuntimeError("session claim is not reserved")
+        self._claims.remove(claim.request_id)
+        if self._sessions.pop(claim.request_id, None) is None:
+            raise RuntimeError("session disappeared before claim commit")
+        self.stats["resumed"] += 1
+        self.stats["tokens_reused"] += claim.shared
+        self.stats["tokens_prefilled"] += len(claim.suffix)
+
+    def rollback_claim(self, claim: Claim) -> None:
+        self._claims.discard(claim.request_id)
+
+    def update_blocks(self, request_id: int, blocks: int) -> None:
+        session = self._sessions.get(request_id)
+        if session is not None:
+            session.blocks = max(0, int(blocks))
+
+    def session_tokens(self, request_id: int) -> list[int] | None:
+        session = self._sessions.get(request_id)
+        return None if session is None else list(session.tokens)
+
+    def oldest_id(self, *, require_blocks: bool = False) -> int | None:
+        candidates = [
+            s for s in self._sessions.values()
+            if s.request_id not in self._claims and (not require_blocks or s.blocks > 0)
+        ]
+        if not candidates:
+            return None
+        return min(candidates, key=lambda s: s.stamp).request_id
+
     def park(self, request_id: int, tokens: list[int], blocks: int) -> list[int]:
         """Register a paused session. Returns ids the caller must finish."""
         self._clock += 1
@@ -127,17 +187,37 @@ class SessionCache:
         )
         return self._evict_to_fit()
 
-    def evict_oldest(self) -> int | None:
+    def evict_oldest(self, *, require_blocks: bool = False) -> int | None:
         """Drop the least-recently parked session. Caller must finish the id."""
-        if not self._sessions:
+        request_id = self.oldest_id(require_blocks=require_blocks)
+        if request_id is None:
             return None
-        oldest = min(self._sessions.values(), key=lambda s: s.stamp)
-        del self._sessions[oldest.request_id]
+        del self._sessions[request_id]
         self.stats["evicted"] += 1
-        return oldest.request_id
+        return request_id
 
     def forget(self, request_id: int) -> None:
         self._sessions.pop(request_id, None)
+        self._claims.discard(request_id)
+
+    def finish_exact(self, token_ids: list[int]) -> int | None:
+        """Retire a completed trajectory without guessing between siblings.
+
+        The caller supplies the final prompt plus sampled completion, not a
+        prefix or re-tokenized text. Active/claimed sessions are never touched.
+        """
+        matches = [s.request_id for s in self._sessions.values()
+                   if s.tokens == token_ids]
+        if len(matches) > 1:
+            self.stats["finish_ambiguous"] += 1
+            return None
+        if not matches or matches[0] in self._claims:
+            self.stats["finish_missed"] += 1
+            return None
+        request_id = matches[0]
+        self.forget(request_id)
+        self.stats["finished"] += 1
+        return request_id
 
     def reset_stats(self) -> None:
         """Zero the counters, keeping the parked sessions. For A/B arms."""
@@ -148,6 +228,7 @@ class SessionCache:
         """Every session is gone, e.g. the KV pool was invalidated. Returns their ids."""
         ids = list(self._sessions)
         self._sessions.clear()
+        self._claims.clear()
         return ids
 
     def _evict_to_fit(self) -> list[int]:

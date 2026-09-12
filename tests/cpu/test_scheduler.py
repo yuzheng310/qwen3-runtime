@@ -137,6 +137,54 @@ def test_preempt_youngest_running_when_decode_needs_a_new_block():
     assert any(r.num_computed_tokens == 0 and r.num_scheduled_tokens > 1 for r in batch)
 
 
+def test_apc_preemption_releases_request_refs_instead_of_immediately_reattaching():
+    cfg = Config(
+        num_kv_blocks=4,
+        block_size=4,
+        max_num_seqs=2,
+        max_num_batched_tokens=32,
+        enable_prefix_cache=True,
+    )
+    bm = BlockManager(4, 4, enable_prefix_cache=True)
+    sched = Scheduler(cfg, bm)
+    a, b = (
+        Request(list(range(8)), max_tokens=4),
+        Request(list(range(8, 16)), max_tokens=4),
+    )
+    sched.add(a)
+    sched.add(b)
+    batch = sched.schedule()
+    sched.postprocess(batch, [11, 22])
+    assert bm.num_free_blocks == 0
+    assert bm.cache_blocks == 4
+    batch = sched.schedule()
+    assert batch, "preemption must make physical capacity available"
+    assert sched.num_preemptions >= 1
+
+
+def test_preempted_request_reuses_surviving_apc_when_readmitted():
+    cfg = Config(
+        block_size=4,
+        num_kv_blocks=8,
+        max_num_seqs=2,
+        max_num_batched_tokens=32,
+        enable_prefix_cache=True,
+    )
+    manager = BlockManager(num_blocks=8, block_size=4, enable_prefix_cache=True)
+    sched = Scheduler(cfg, manager)
+    req = Request(token_ids=list(range(8)), max_tokens=2)
+    sched.add(req)
+    sched.postprocess(sched.schedule(), [9])
+    sched.running.remove(req)
+    sched._preempt(req)
+    assert not req.block_table
+    assert sched.schedule() == [req]
+    assert req.num_computed_tokens == 8, (
+        "surviving cached history should not be recomputed"
+    )
+    assert req.num_scheduled_tokens == 1
+
+
 def test_add_rejects_sequence_that_cannot_fit_in_the_pool():
     sched = _scheduler(num_blocks=2, block_size=16)
     req = Request(token_ids=list(range(48)), max_tokens=1)

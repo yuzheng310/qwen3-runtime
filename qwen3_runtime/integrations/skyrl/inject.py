@@ -60,7 +60,7 @@ def make_local_engines(cfg: Any, colocate_pg: Any, tokenizer: Any) -> list:
     from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
     del tokenizer
-    from skyrl_train.inference_engines.ray_wrapped_inference_engine import RayWrappedInferenceEngine
+    from qwen3_runtime.integrations.skyrl.ray_wrapped import Qwen3RayWrappedInferenceEngine
 
     from qwen3_runtime.integrations.skyrl.ray_actor import Qwen3RayActor
 
@@ -85,7 +85,7 @@ def make_local_engines(cfg: Any, colocate_pg: Any, tokenizer: Any) -> list:
         logprob_path=os.environ.get("QWEN3_LOGPROB_SIDECAR", ""),
         source_commit=os.environ.get("QWEN3_SOURCE_COMMIT", ""),
     )
-    engines = [RayWrappedInferenceEngine(actor)]
+    engines = [Qwen3RayWrappedInferenceEngine(actor)]
     if bool(cfg.trainer.placement.colocate_all):
         ray.get(actor.sleep.remote(level=1))
     return engines
@@ -117,11 +117,18 @@ def patch_codescout_rollout_concurrency(limit: int | None = None) -> int:
         limit = int(os.environ.get("QWEN3_OH_CONCURRENCY", "4"))
     from src.generator.code_search_generator import CodeSearchGenerator
 
+    from qwen3_runtime.integrations.skyrl.session_lifecycle import wrap_trajectory_finish
+
     orig = CodeSearchGenerator.code_search_loop
+    finish = os.environ.get("QWEN3_FINISH_SESSIONS", "0").strip().lower() in {"1", "true", "yes"}
+    if finish and not getattr(orig, "_qwen3_finishes_sessions", False):
+        orig = wrap_trajectory_finish(orig)
+        CodeSearchGenerator.code_search_loop = orig
     if getattr(orig, "_qwen3_oh_limited", False):
         return int(getattr(orig, "_qwen3_oh_limit", limit))
     wrapped = wrap_async_with_semaphore(orig, limit)
     wrapped._qwen3_oh_limited = True  # type: ignore[attr-defined]
+    wrapped._qwen3_finishes_sessions = finish  # type: ignore[attr-defined]
     CodeSearchGenerator.code_search_loop = wrapped
     return limit
 

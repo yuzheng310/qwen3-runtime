@@ -9,8 +9,10 @@ import os
 import time
 from typing import Any, Dict, Optional
 
-from qwen3_runtime.rollout.driver import EngineDriver
+from qwen3_runtime.rollout.driver import AdmissionDeferred, EngineDriver
 from qwen3_runtime.engine.engine import Engine
+from qwen3_runtime.engine.session_offload import RestoreAdmissionError, SessionOffloadError
+from qwen3_runtime.kv.cpu_store import CpuKVCapacityError
 from qwen3_runtime.sampling import SamplingParams
 from qwen3_runtime.rollout.tool_parser import assistant_chat_message, parse_qwen_tool_calls
 from qwen3_runtime.rollout.session import SessionCache, session_kv_enabled
@@ -256,19 +258,33 @@ def _parked_kv_budget(engine: Engine, share: float = PARKED_KV_SHARE) -> int:
 class Qwen3InferenceEngine(InferenceEngineInterface):
     """In-process engine. CUDA IPC weight updates; KV dropped after every update."""
 
-    def __init__(self, engine: Engine, *, tokenizer: Any | None = None):
+    def __init__(
+        self, engine: Engine, *, tokenizer: Any | None = None,
+        session_max_blocks: int | None = None, session_max_sessions: int | None = None,
+    ):
         self.engine = engine
         self.tokenizer = tokenizer
         self._weight_comm: dict[str, Any] | None = None
         self._model_update_group = None
         self._ipc_keepalives: list[Any] = []
         self._session_kv = session_kv_enabled()
+        self._session_offload = getattr(engine, "session_offload", None)
+        self._cpu_offload = bool(self._session_kv and self._session_offload and self._session_offload.enabled)
         # Blocks are the binding bound: a parked session pins at least one, so
         # the block budget caps the count as well. The count cap is kept only so
         # that an engine reporting zero-block sessions cannot grow the dict.
-        parked_blocks = _parked_kv_budget(engine)
-        self._sessions = SessionCache(max_blocks=parked_blocks, max_sessions=parked_blocks)
-        self._driver = EngineDriver(engine)
+        parked_blocks = (
+            engine.block_manager.num_blocks if self._cpu_offload else _parked_kv_budget(engine)
+        )
+        if session_max_blocks is not None:
+            if session_max_blocks < 1:
+                raise ValueError("session_max_blocks must be positive")
+            parked_blocks = session_max_blocks
+        session_count = parked_blocks if session_max_sessions is None else session_max_sessions
+        if session_count < 1:
+            raise ValueError("session_max_sessions must be positive")
+        self._sessions = SessionCache(max_blocks=parked_blocks, max_sessions=session_count)
+        self._driver = EngineDriver(engine, before_step=self._reclaim_for_active_step)
         # Prompt per in-flight request, so the turn can be parked under the
         # sequence its KV actually covers once the engine thread finishes it.
         self._pending_prompt: dict[int, list[int]] = {}
@@ -458,19 +474,59 @@ class Qwen3InferenceEngine(InferenceEngineInterface):
 
     def _admit(self, ids: list[int], *, max_tokens: int, sampling: SamplingParams) -> int:
         """Put one turn on the scheduler. Runs on the engine thread."""
-        claim = self._sessions.claim(ids) if self._session_kv else None
+        claim = (
+            self._sessions.reserve_claim(ids)
+            if self._cpu_offload
+            else (self._sessions.claim(ids) if self._session_kv else None)
+        )
         if claim is not None:
-            self.engine.resume_request(
-                claim.request_id,
-                claim.suffix,
-                max_tokens,
-                hold_kv=True,
-                sampling=sampling,
-                ignore_eos=False,
-                stop_token_ids=STOP_TOKEN_IDS,
-            )
-            self._pending_prompt[claim.request_id] = ids
-            return claim.request_id
+            try:
+                self.engine.resume_request(
+                    claim.request_id,
+                    claim.suffix,
+                    max_tokens,
+                    hold_kv=True,
+                    sampling=sampling,
+                    ignore_eos=False,
+                    stop_token_ids=STOP_TOKEN_IDS,
+                )
+            except SessionOffloadError as exc:
+                # A CPU snapshot is a cache, not a correctness dependency.
+                # Remove the failed claim and restart through the real engine
+                # admission path, retaining the stable caller association.
+                if self._cpu_offload:
+                    self._sessions.rollback_claim(claim)
+                    if isinstance(exc, RestoreAdmissionError):
+                        scheduler = self.engine.scheduler
+                        if scheduler.running or scheduler.waiting:
+                            # Preserve both the session and CPU snapshot while
+                            # active work frees capacity. The driver owns retry.
+                            self._sessions.stats["turns"] -= 1
+                            raise AdmissionDeferred("defer CPU restore until active work yields") from exc
+                        snapshot = self._session_offload.snapshot_for(claim.request_id)
+                        if snapshot is not None:
+                            manager = self.engine.block_manager
+                            before = manager.num_free_blocks
+                            self._offload_oldest_until_safe(min_free=snapshot.metadata.logical_blocks)
+                            if manager.num_free_blocks > before:
+                                self._sessions.stats["turns"] -= 1
+                                raise AdmissionDeferred("defer CPU restore after reclaiming idle KV") from exc
+                    self._sessions.forget(claim.request_id)
+                    self.engine.finish_request(claim.request_id)
+                    self._sessions.stats["started"] += 1
+                    self._sessions.stats["tokens_prefilled"] += len(ids)
+                    claim = None
+                else:
+                    raise
+            except BaseException:
+                if self._cpu_offload:
+                    self._sessions.rollback_claim(claim)
+                raise
+            if claim is not None:
+                if self._cpu_offload:
+                    self._sessions.commit_claim(claim)
+                self._pending_prompt[claim.request_id] = ids
+                return claim.request_id
         request_id = self.engine.add_request(
             ids,
             max_tokens=max_tokens,
@@ -492,7 +548,39 @@ class Qwen3InferenceEngine(InferenceEngineInterface):
         self._retire(self._sessions.park(request_id, ids + tokens, n_blocks))
         self._evict_for_free_watermark()
 
-    def _evict_for_free_watermark(self) -> None:
+    def _reclaim_for_active_step(self) -> None:
+        """Idle KV must yield before a runnable request preempts itself."""
+        manager = getattr(self.engine, "block_manager", None)
+        if not self._session_kv or manager is None or manager.num_free_blocks > 0:
+            return
+        self._evict_for_free_watermark(min_free=1)
+
+    def _offload_oldest_until_safe(self, *, min_free: int | None = None) -> None:
+        if not self._cpu_offload:
+            return
+        manager = getattr(self.engine, "block_manager", None)
+        if manager is None:
+            return
+        if min_free is None:
+            min_free = max(1, int(FREE_BLOCK_WATERMARK * manager.num_blocks))
+        while manager.num_free_blocks < min_free:
+            request_id = self._sessions.oldest_id(require_blocks=True)
+            if request_id is None:
+                manager.reclaim_cached_blocks(min_free)
+                return
+            if self.engine.has_cpu_snapshot(request_id):
+                self._sessions.update_blocks(request_id, 0)
+                continue
+            try:
+                self.engine.offload_request(request_id, session_key=str(request_id))
+            except (SessionOffloadError, CpuKVCapacityError):
+                return
+            self._sessions.update_blocks(request_id, 0)
+            # A saved request can leave full blocks owned solely by APC.
+            # They are now safe to reclaim; shared/live blocks remain pinned.
+            manager.reclaim_cached_blocks(min_free)
+
+    def _evict_for_free_watermark(self, *, min_free: int | None = None) -> None:
         """Keep a slice of the pool free so the next prefill can allocate.
 
         The 45% parked-block cap is a static bound. This is the live one: if
@@ -505,12 +593,19 @@ class Qwen3InferenceEngine(InferenceEngineInterface):
         num_blocks = getattr(manager, "num_blocks", None)
         if not num_blocks:
             return
-        min_free = max(1, int(FREE_BLOCK_WATERMARK * num_blocks))
+        if min_free is None:
+            min_free = max(1, int(FREE_BLOCK_WATERMARK * num_blocks))
+        # Do not copy a session just because disposable APC entries fill the
+        # free list. Exhaust that unreferenced tier before touching live KV.
+        reclaim = getattr(manager, "reclaim_cached_blocks", None)
+        if reclaim is not None:
+            reclaim(min_free)
+        self._offload_oldest_until_safe(min_free=min_free)
         while True:
             num_free = getattr(manager, "num_free_blocks", None)
             if num_free is None or num_free >= min_free:
                 break
-            extra = self._sessions.evict_oldest()
+            extra = self._sessions.evict_oldest(require_blocks=True)
             if extra is None:
                 break
             before = num_free
@@ -523,6 +618,21 @@ class Qwen3InferenceEngine(InferenceEngineInterface):
         for request_id in request_ids:
             self.engine.finish_request(request_id)
 
+    async def finish_session(self, token_ids: list[int]) -> int:
+        """Release an explicitly finished trajectory, including a CPU snapshot."""
+        history = list(token_ids)
+
+        def finish() -> int:
+            request_id = self._sessions.finish_exact(history)
+            if request_id is None:
+                return 0
+            self.engine.finish_request(request_id)
+            return 1
+
+        # run_on_engine waits synchronously for the GPU owner. Keep that wait
+        # off the caller/Ray event loop so other turns and timeouts can run.
+        return await asyncio.to_thread(self._driver.run_on_engine, finish)
+
     def _drop_sessions(self) -> None:
         """Forget every resident session, e.g. because the KV pool was dropped.
 
@@ -532,7 +642,10 @@ class Qwen3InferenceEngine(InferenceEngineInterface):
         self._retire(self._sessions.drop_all())
 
     def session_report(self) -> dict[str, float | int]:
-        return self._sessions.report()
+        report = self._sessions.report()
+        if self._session_offload is not None:
+            report.update({f"offload_{k}": v for k, v in self._session_offload.report().items()})
+        return report
 
     async def completion(self, request_payload: Dict[str, Any]) -> Dict[str, Any]:
         body = request_payload.get("json") if "json" in request_payload else request_payload

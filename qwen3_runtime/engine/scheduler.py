@@ -63,7 +63,9 @@ class Scheduler:
             return []
         raise RuntimeError("scheduler could not admit a batch after preemption")
 
-    def postprocess(self, reqs: list[Request], token_ids: list[int | None]) -> list[Request]:
+    def postprocess(
+        self, reqs: list[Request], token_ids: list[int | None]
+    ) -> list[Request]:
         """Advance computed tokens; append samples for rows that caught up to seq len.
 
         `token_ids[i]` is None when request i did not produce a new token
@@ -259,8 +261,22 @@ class Scheduler:
             if len(scheduled) >= self.config.max_num_seqs or token_budget <= 0:
                 break
             req = self.waiting.popleft()
+            attached = False
+            if (
+                self.config.enable_prefix_cache
+                and not req.block_table
+                and req.num_computed_tokens == 0
+            ):
+                # A preempted request releases its references immediately,
+                # then may reuse any prefix that survived until readmission.
+                attached = self.block_manager.attach_cached_prefix(req) > 0
             n = self._tokens_to_schedule(req, token_budget)
             if n <= 0:
+                if attached:
+                    # No runnable token: do not repin the blocks preemption
+                    # made reclaimable and recreate the original deadlock.
+                    self.block_manager.deallocate(req)
+                    req.reset_kv_state()
                 deferred.append(req)
                 continue
             self.block_manager.allocate_for_tokens(req, n)
@@ -281,11 +297,10 @@ class Scheduler:
     def _preempt(self, req: Request) -> None:
         self._strip_spec_drafts(req)
         self.block_manager.deallocate(req)
-        req.num_computed_tokens = 0
-        req.num_scheduled_tokens = 0
-        req.cached_tokens = 0
-        if self.config.enable_prefix_cache:
-            self.block_manager.attach_cached_prefix(req)
+        req.reset_kv_state()
+        # Reattaching APC here immediately pins the very blocks preemption
+        # must make reclaimable. Leave them cache-only for allocation pressure
+        # to evict; the preempted request retains its exact token history.
         req.status = RequestStatus.WAITING
         self.waiting.appendleft(req)
         self.num_preemptions += 1

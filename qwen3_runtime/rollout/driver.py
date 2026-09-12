@@ -28,10 +28,15 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from qwen3_runtime.engine.request import RequestStatus
+
+
+class AdmissionDeferred(RuntimeError):
+    """Capacity is temporarily occupied; retry the admission on this owner."""
 
 
 @dataclass
@@ -57,6 +62,9 @@ class _Waiter:
     future: asyncio.Future
     on_done: Callable[[int, list[int]], None] | None
     turn: Turn | None = None
+    deferred_active_ids: frozenset[int] | None = None
+    deferred_free_blocks: int = -1
+    deferred_completion_generation: int = -1
 
     def resolve(self, value: Any) -> None:
         """Hand the result back to the caller's loop, not to this thread."""
@@ -85,12 +93,21 @@ class EngineDriver:
     landing while ``step()`` is halfway through a batch.
     """
 
-    def __init__(self, engine: Any, *, idle_poll_s: float = 0.02) -> None:
+    def __init__(
+        self,
+        engine: Any,
+        *,
+        idle_poll_s: float = 0.02,
+        before_step: Callable[[], None] | None = None,
+    ) -> None:
         self.engine = engine
+        self.before_step = before_step
         self.idle_poll_s = idle_poll_s
         self._cond = threading.Condition()
         self._pending: list[Callable[[], None]] = []
+        self._admissions: deque[tuple[_Waiter, Callable[[], int]]] = deque()
         self._waiters: dict[int, _Waiter] = {}
+        self._completion_generation = 0
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self.stats = {"steps": 0, "batched_requests": 0, "max_batch": 0}
@@ -119,12 +136,21 @@ class EngineDriver:
             self._stop.set()
             self._cond.notify_all()
         thread.join(timeout=timeout)
+        if thread.is_alive():
+            # A timeout is not proof that the owner stopped.  Keep the
+            # thread handle so lifecycle callers cannot concurrently mutate
+            # weights, the pool, or scheduler state behind its back.
+            raise TimeoutError("engine driver did not stop before timeout")
         with self._cond:
             self._thread = None
             stranded = list(self._waiters.values())
+            stranded.extend(waiter for waiter, _ in self._admissions)
+            self._admissions.clear()
             self._waiters.clear()
         for waiter in stranded:
-            waiter.resolve(RuntimeError("engine driver stopped before the turn finished"))
+            waiter.resolve(
+                RuntimeError("engine driver stopped before the turn finished")
+            )
 
     # -- submitting work ---------------------------------------------------
 
@@ -146,7 +172,7 @@ class EngineDriver:
         loop = asyncio.get_running_loop()
         waiter = _Waiter(loop=loop, future=loop.create_future(), on_done=on_done)
         with self._cond:
-            self._pending.append(lambda: self._begin(waiter, start))
+            self._admissions.append((waiter, start))
             self._cond.notify()
         return await waiter.future
 
@@ -180,14 +206,19 @@ class EngineDriver:
 
     # -- the thread --------------------------------------------------------
 
-    def _begin(self, waiter: _Waiter, start: Callable[[], int]) -> None:
+    def _begin(self, waiter: _Waiter, start: Callable[[], int]) -> bool:
+        if waiter.future.done():
+            return True
         try:
             request_id = start()
+        except AdmissionDeferred:
+            return False
         except BaseException as exc:
             waiter.resolve(exc)
-            return
+            return True
         waiter.turn = Turn(request_id=request_id)
         self._waiters[request_id] = waiter
+        return True
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -195,12 +226,47 @@ class EngineDriver:
                 while self._pending:
                     self._pending.pop(0)()
                 scheduler = self.engine.scheduler
+                limit = getattr(
+                    getattr(self.engine, "config", None), "max_num_seqs", 2**31
+                )
+                for _ in range(len(self._admissions)):
+                    if len(scheduler.running) + len(scheduler.waiting) >= limit:
+                        break
+                    waiter, start = self._admissions.popleft()
+                    if waiter.future.done():
+                        continue
+                    active_ids = frozenset(
+                        req.request_id
+                        for req in (*scheduler.running, *scheduler.waiting)
+                    )
+                    free_blocks = getattr(
+                        getattr(self.engine, "block_manager", None),
+                        "num_free_blocks",
+                        0,
+                    )
+                    if (
+                        waiter.deferred_active_ids == active_ids
+                        and free_blocks <= waiter.deferred_free_blocks
+                        and waiter.deferred_completion_generation
+                        == self._completion_generation
+                    ):
+                        self._admissions.append((waiter, start))
+                        continue
+                    if not self._begin(waiter, start):
+                        waiter.deferred_active_ids = active_ids
+                        waiter.deferred_free_blocks = free_blocks
+                        waiter.deferred_completion_generation = (
+                            self._completion_generation
+                        )
+                        self._admissions.append((waiter, start))
                 if not (scheduler.waiting or scheduler.running):
                     # Paused sessions are not work; they are just resident.
                     self._cond.wait(timeout=self.idle_poll_s)
                     continue
                 in_flight = len(scheduler.running) + len(scheduler.waiting)
             try:
+                if self.before_step is not None:
+                    self.before_step()
                 self.engine.step()
                 self._harvest(in_flight)
             except BaseException as exc:
@@ -254,6 +320,7 @@ class EngineDriver:
                 ):
                     self._waiters.pop(request_id, None)
                     finished.append(waiter)
+            self._completion_generation += len(finished)
 
         for waiter in finished:
             turn = waiter.turn

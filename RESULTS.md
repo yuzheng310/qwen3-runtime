@@ -6,6 +6,16 @@ with a different, explicitly limited provenance record. Numeric
 measurements and reproducibility fields are preserved from the development
 evidence store; ephemeral benchmark-host names are removed from the public JSON.
 
+## Optional CPU session offload
+
+[Implementation, measurements, and reproduction](SESSION_CPU_OFFLOAD.md) document
+source-hashed exploratory diagnostics from 2026-09-12. Fixed 26.40 GiB capacity
+and 24 clients yielded 11.75% less replay time than the faster GPU control;
+4-client and larger-pool comparisons showed no credible CPU-tier benefit.
+These records are separate from the frozen benchmarks below and do not measure
+a new complete GRPO training step. [Selected per-run evidence](bench/results/session-cpu-offload/observations.json)
+includes first-use costs and the corrected GPU-capacity baseline.
+
 ## Closed-batch runtime comparison
 
 Median output tokens/s, including prompt and output wall time:

@@ -114,7 +114,9 @@ class DecodeCudaGraph:
         self.logits = torch.empty(n, vocab, dtype=dtype, device=device)
         self.append_pos = torch.zeros(n, dtype=torch.int32, device=device)
         self.wrapper, self._indptr, self._indices, self._last_page_len = (
-            make_flashinfer_graph_decode_wrapper(device, n, pool.num_blocks)
+            # APC can reference the same physical page from every sequence.
+            # FlashInfer stores logical references, not unique physical pages.
+            make_flashinfer_graph_decode_wrapper(device, n, n * pool.num_blocks)
         )
         self._last_page_len_host = torch.zeros(n, dtype=torch.int32)
 
