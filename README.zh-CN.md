@@ -47,17 +47,50 @@
 
 ## Rollout 机制带来的实际变化
 
-### 可选 CPU KV offload：收益取决于容量压力
+### 可选 CPU KV offload：展示收益，也验证边界
 
-三次重复的固定 token 回放中，24 个客户端共享 **26.40 GiB** KV 池时，CPU offload
-耗时 **58.95 s**，同配置较快的 GPU 对照（纯 APC）为 **66.80 s**：耗时降低
-**11.75%**，prefill 减少 **31.44%**。4 并发并清理结束轨迹后，或把 GPU 池扩大到
-33.47 GiB 后，两组都不需要 CPU 搬运，时间差异不足 0.2%。
+![三个容量与并发场景下的 CPU offload 对照，包含逐次测量与首次运行](docs/assets/performance/offload-boundary.png)
 
-CPU offload 保持**默认关闭**。目标精度加载使实测加载峰值从 15.87 降至 7.61 GiB，
-释放的容量同样属于 GPU 基线的收益。这些是带源码摘要、合成工具等待的探索性回放，
-**不是新一轮完整 GRPO 训练结果**。
-[配置方式、逐次数据与结论边界](SESSION_CPU_OFFLOAD.md)。
+**固定容量压力下，回放耗时降低 11.75%，prefill 减少 31.44%。**
+24 个客户端共享 26.40 GiB GPU KV 池时，同步 CPU offload 耗时 **58.95 s**，
+同配置较快的 GPU 对照（纯 APC）为 **66.80 s**。图中同时展示三组对照、
+每次正式测量和首次运行。4 并发并清理结束轨迹后，或将 GPU 池扩大到
+33.47 GiB 后，没有 CPU 搬运，**没有可信的 offload 加速**。
+
+测量使用 CodeScout-4B BF16、一张报告 **49,140 MiB** 显存的 RTX 4090、
+24 条已记录任务 / 102 轮 / 9,871 个固定输出 token、合成 1 s 工具等待，
+每组 n=3 正式重复。这是带源码摘要的探索性回放，**不是零售版 24GB 卡的测量，
+也不是新一轮完整 GRPO 训练结果**。Offload 保持**默认关闭**。
+
+![加载峰值、可用 GPU KV 容量和无效 CPU 保存的改进](docs/assets/performance/offload-engineering.png)
+
+这部分工作还改善了周边系统：
+
+- **目标精度加载：** GPU 加载峰值 **15.87 → 7.61 GiB**，自动 KV 容量
+  **12,013 → 15,232 块（+26.80%）**。容量收益也属于 GPU 对照，不宣称加载提速。
+- **明确的轨迹结束通知：** 4 并发回放中，无效 CPU 写入从 **29.34 → 0 GiB**。
+  两组都没有恢复，收益来自及时清理，不能计作 CPU 缓存命中。
+- **安全的状态迁移：** 快照版本检查、事务式恢复、容量准入，以及超大快照的
+  提前拒绝。权重变化使旧 KV 失效；结束、取消和睡眠回收对应状态。
+- **可审计的测量：** 保存实际配置、源码与轨迹摘要、有效恢复、传输耗时和字节账目。
+
+**验证证据：下列计数口径不同，不能相加为一个“测试总数”。**
+
+| 检查 | 已记录证据 | 说明了什么 |
+|---|---|---|
+| 公开版 CPU 测试 | **362 通过 / 24 跳过**；[测试摘要](TEST_RESULTS.md) | 公开源码行为；依赖可选资源的检查仍跳过 |
+| 历史 CUDA 测试 | **6 通过**；[验证记录](bench/results/session-cpu-offload/verification.json) | 真实 GPU 的保存、恢复与 offload 路径 |
+| 非强制输出的模型检查 | **16 个样本**，前缀 128–16,384 token；[逐项记录](bench/results/session-cpu-offload/verification.json) | KV 逐位一致；与 GPU 保留路径的续写及 logprob 一致 |
+| 回放审计 | **58 次执行**，含重复组与首次运行；[审计记录](bench/results/session-cpu-offload/verification.json) | 源码/轨迹关联、字节守恒及最终清理；不是 58 个独立工作负载 |
+| 加载等价性 | **8.04 GB 权重 + 64 MiB RoPE** 完全相等；[记录](bench/results/session-cpu-offload/observations.json) | 降低峰值后，检查过的完整模型状态不变 |
+| Ray 生命周期 | 实际生成 → 结束 → 睡眠/唤醒；[记录](bench/results/session-cpu-offload/observations.json) | 合成轨迹返回包下的适配集成，不等于完整 GRPO |
+
+公开 CPU 测试与历史 GPU 检查是不同批次。公开数据提供四组主要实验的
+**40 条逐次记录**，另以检查级审计覆盖 18 次辅助执行；不分发私有轨迹和操作日志。
+完整冷重算与 GPU 保留路径之间仍可能存在数值差异。
+[实现、适用范围与复现方式](SESSION_CPU_OFFLOAD.md) ·
+[绘图脚本](scripts/plot_session_offload.py) ·
+[图表数值及来源摘要](docs/assets/performance/offload-figure-data.json)。
 
 ### Session KV 与 APC：四组对照说明了什么
 

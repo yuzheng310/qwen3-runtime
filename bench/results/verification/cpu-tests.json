@@ -1,6 +1,6 @@
 {
   "status": "passed",
-  "timestamp": "2026-09-12T14:24:27.571419+08:00",
+  "timestamp": "2026-09-12T16:11:43.770015+08:00",
   "command": "uv run --frozen python -m pytest tests/ -q --junitxml=<local-output>",
   "python": "3.13.12",
   "platform": "macOS ARM64",
@@ -9,7 +9,7 @@
   "skipped": 24,
   "failures": 0,
   "errors": 0,
-  "duration_s": 4.576,
+  "duration_s": 4.292,
   "runtime_and_test_source_sha256": "e8b6fcd638c2b4e9e9ee99dfd7012e57c7e997a187f33f6fbdc91f592504a54e",
   "digest_method": "SHA256 of sorted runtime paths then sorted test paths, each relative POSIX path followed by file bytes",
   "build": "uv build: wheel and source distribution passed",

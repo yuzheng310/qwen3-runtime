@@ -16,6 +16,17 @@ These records are separate from the frozen benchmarks below and do not measure
 a new complete GRPO training step. [Selected per-run evidence](bench/results/session-cpu-offload/observations.json)
 includes first-use costs and the corrected GPU-capacity baseline.
 
+![Offload timing with all controls and individual repeated observations](docs/assets/performance/offload-boundary.png)
+
+[Engineering improvements](docs/assets/performance/offload-engineering.png)
+separately show loading peak, available KV blocks and avoided unused CPU writes.
+[The plotting script](scripts/plot_session_offload.py) regenerates both figures
+from the public JSON; [figure values](docs/assets/performance/offload-figure-data.json)
+record their source SHA-256. Bars are medians; points are individual observations,
+not confidence intervals. [Verification records](bench/results/session-cpu-offload/verification.json)
+provide the archived replay audit and per-case unforced model checks. No GPU
+benchmark was rerun to produce these visualizations.
+
 ## Closed-batch runtime comparison
 
 Median output tokens/s, including prompt and output wall time:

@@ -1,10 +1,10 @@
 # Test results
 
 - Status: **passed**
-- Recorded at: `2026-09-12T14:24:27.571419+08:00`
+- Recorded at: `2026-09-12T16:11:43.770015+08:00`
 - Command: `uv run --frozen python -m pytest tests/ -q --junitxml=<local-output>`
 - Python: `3.13.12` (macOS ARM64)
-- Duration: `4.576 s`
+- Duration: `4.292 s`
 - Total: **386**
 - Passed: **362**
 - Skipped: **24**
@@ -25,6 +25,13 @@ round-trips, full checkpoint/buffer equivalence, and actual Ray finish/sleep/wak
 Their scope and measured source hashes are recorded in
 [the offload report](SESSION_CPU_OFFLOAD.md). They were not rerun during this
 publication step. A new complete GRPO training comparison remains pending.
+
+[Archived verification records](bench/results/session-cpu-offload/verification.json)
+include the CUDA test result and original-log hash, all 16 model-check verdicts,
+and an eight-case replay audit covering 58 executions. This audit checks source
+identity, transfer-byte conservation and cleanup. Executions include repeated
+arms and first-use passes; model checks use four lengths from one trajectory.
+These are separate evidence categories, not extra independent CPU tests.
 
 Internal analysis and server-local Git-wrapper tests stay outside the public
 snapshot together with their unpublished tools and data.

@@ -50,19 +50,56 @@ scheduling, state management, and integration code.
 
 ## What the rollout mechanisms changed
 
-### Optional CPU KV offload: a capacity-dependent result
+### Optional CPU KV offload: measured gains and limits
 
-In three-repeat, fixed-token diagnostics, 24 clients sharing a **26.40 GiB** KV
-pool completed in **58.95 s** with CPU offload versus **66.80 s** for the faster
-GPU control (APC-only): **11.75% less time**, with **31.44% fewer prefill tokens**.
-At 4 clients with completed sessions released, or with a larger 33.47 GiB GPU
-pool, neither arm needed CPU transfers and timing differences were below 0.2%.
+![CPU offload across three capacity and concurrency conditions](docs/assets/performance/offload-boundary.png)
 
-CPU offload stays **opt-in**. Target-dtype loading reduced measured loading peak
-from 15.87 to 7.61 GiB; that extra capacity benefits the GPU baseline too.
-These are source-hashed exploratory replays with synthetic tool delay,
-**not new complete GRPO training results**.
-[Configuration, all repetitions, and limitations](SESSION_CPU_OFFLOAD.md).
+**11.75% less replay time and 31.44% fewer prefill tokens under fixed-capacity
+pressure.** With 24 clients and a 26.40 GiB GPU KV pool, synchronous CPU offload
+completed in **58.95 s**, versus **66.80 s** for the faster GPU control (APC).
+All three controls, individual warm runs and first-use passes appear above.
+With 4 clients and completion cleanup, or a larger 33.47 GiB GPU pool, no CPU
+copies were needed and there was **no credible offload speedup**.
+
+The measurements use CodeScout-4B BF16 on one RTX 4090 reporting **49,140 MiB**,
+24 recorded tasks / 102 turns / 9,871 fixed output tokens, synthetic 1 s tool
+waits and n=3 warm repeats. They are source-hashed exploratory replays, not
+retail-24GB measurements or new complete GRPO training results. Offload remains
+**disabled by default**.
+
+![Loading peak, available GPU KV capacity and avoided useless CPU writes](docs/assets/performance/offload-engineering.png)
+
+The work also improved the surrounding system:
+
+- **Target-dtype loading:** peak allocated GPU memory fell **15.87 → 7.61 GiB**;
+  automatic KV capacity grew **12,013 → 15,232 blocks (+26.80%)**. This improvement
+  also benefits the GPU controls; it is not a loading-speed claim.
+- **Explicit trajectory completion:** unused CPU writes fell **29.34 → 0 GiB**
+  per four-client replay. Both cases had zero restores; cleanup prevents waste.
+- **Safe state transitions:** versioned snapshots, transactional restore,
+  capacity admission and rejection of oversized snapshots before useful data
+  is evicted. Weight changes invalidate stale KV; finish/abort/sleep reclaim it.
+- **Auditable measurements:** effective configuration, source/trace hashes,
+  useful restores, transfer costs and byte accounting accompany the results.
+
+**Verification evidence — counts have different scopes and are not additive:**
+
+| Check | Recorded evidence | What it establishes |
+|---|---|---|
+| Public CPU suite | **362 passed / 24 skipped**; [test summary](TEST_RESULTS.md) | Published-source behavior; optional-resource tests remain skipped |
+| Archived CUDA tests | **6 passed**; [verification records](bench/results/session-cpu-offload/verification.json) | Real GPU save/restore and offload paths |
+| Unforced model checks | **16 cases**, 128–16,384-token prefixes; [per-case checks](bench/results/session-cpu-offload/verification.json) | Bit-exact KV and identical continuation/logprobs against held GPU KV |
+| Replay audit | **58 executions**, including repeated arms and first-use passes; [audit](bench/results/session-cpu-offload/verification.json) | Source/trace linkage, byte conservation and final cleanup; not 58 independent workloads |
+| Loader equivalence | **8.04 GB weights + 64 MiB RoPE**, exact; [records](bench/results/session-cpu-offload/observations.json) | Lower-peak conversion preserves the complete checked state |
+| Ray lifecycle | Actual generation → finish → sleep/wake; [records](bench/results/session-cpu-offload/observations.json) | Adapter integration with a synthetic trajectory envelope; not full GRPO |
+
+The public CPU suite and archived GPU checks are separate runs. The public
+export includes **40 per-run records for four main cases**, plus a check-level
+audit covering 18 ancillary executions; private traces and operational logs
+are not redistributed. Full recomputation may differ numerically from held KV.
+[Implementation, scope and reproduction](SESSION_CPU_OFFLOAD.md) ·
+[Plotting script](scripts/plot_session_offload.py) ·
+[Figure values and source hash](docs/assets/performance/offload-figure-data.json).
 
 ### Session KV versus APC: four-arm diagnostics
 

@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "scope": "Archived 2026-09-12 GPU verification; not rerun for this documentation release.",
+  "projection": "Selected check fields and original artifact SHA-256; raw logs and token histories are not redistributed.",
+  "replay_audit": {
+    "original_artifact_sha256": "828d6ec2159871508a495f25f3c6ad374f0d61935a68790bcde3dac0a1d94464",
+    "passed": true,
+    "execution_count_including_first_use": 58,
+    "note": "Executions include repeated arms and first-use passes, not 58 independent workloads. The four main cases publish 40 per-run records in observations.json; this audit also covers 18 ancillary executions.",
+    "cases": [
+      {
+        "name": "default4-retained",
+        "all_rows_including_cold": 8,
+        "source_sha256": "f388cfe146faba657370b0d40c5e21a763d36054cd51d2c20fc9e4eb0ff54b3d",
+        "raw_sha256": "c56ce937be3d4fc632b5c02258a33380f2f2ce6c3d81ff771921eb27d9e9f9fc",
+        "byte_conservation": true,
+        "cleanup_empty": true
+      },
+      {
+        "name": "default4-finished",
+        "all_rows_including_cold": 8,
+        "source_sha256": "7973c077ecaf7feed65e299e15002afcc5554b189205f9789c20a31805aa2a10",
+        "raw_sha256": "f728638e35afa7c6c1b374ca88a20abc01908f38ab15acafe20cc1d7ac2658c3",
+        "byte_conservation": true,
+        "cleanup_empty": true
+      },
+      {
+        "name": "fixed24",
+        "all_rows_including_cold": 12,
+        "source_sha256": "7973c077ecaf7feed65e299e15002afcc5554b189205f9789c20a31805aa2a10",
+        "raw_sha256": "f7ae0757438ea3e6b6ecfe9608b9be54bd6deee17204348c964b39f087699b8c",
+        "byte_conservation": true,
+        "cleanup_empty": true
+      },
+      {
+        "name": "automatic24",
+        "all_rows_including_cold": 12,
+        "source_sha256": "7973c077ecaf7feed65e299e15002afcc5554b189205f9789c20a31805aa2a10",
+        "raw_sha256": "8586dd6f3b97761ee44d7f925f2bec4a3e064aecd6b25fbbf50a1cfb692c9023",
+        "byte_conservation": true,
+        "cleanup_empty": true
+      },
+      {
+        "name": "pressure-main",
+        "all_rows_including_cold": 6,
+        "source_sha256": "7973c077ecaf7feed65e299e15002afcc5554b189205f9789c20a31805aa2a10",
+        "raw_sha256": "8aa0d28c289c76622c0eea90034a5f7d4048d3bf014f03a5a4bffe910aaf178d",
+        "byte_conservation": true,
+        "cleanup_empty": true
+      },
+      {
+        "name": "pressure-holdout",
+        "all_rows_including_cold": 6,
+        "source_sha256": "7973c077ecaf7feed65e299e15002afcc5554b189205f9789c20a31805aa2a10",
+        "raw_sha256": "d603f71f9feeb7f5c1e2a4bca38b48cbdda467ded18f6cd60d787ab8043e0490",
+        "byte_conservation": true,
+        "cleanup_empty": true
+      },
+      {
+        "name": "production-batch4",
+        "all_rows_including_cold": 4,
+        "source_sha256": "7973c077ecaf7feed65e299e15002afcc5554b189205f9789c20a31805aa2a10",
+        "raw_sha256": "2f7bcbb1a7e57507139802802cc45d587bc9f1dcff4caa96d1187456964a6a16",
+        "byte_conservation": true,
+        "cleanup_empty": true
+      },
+      {
+        "name": "default4-gpu-policy-control",
+        "all_rows_including_cold": 2,
+        "source_sha256": "7973c077ecaf7feed65e299e15002afcc5554b189205f9789c20a31805aa2a10",
+        "raw_sha256": "37ee874f6db59c2bb871a469224b4b8c5086204e4e5f61c4354bf10015976eb6",
+        "byte_conservation": true,
+        "cleanup_empty": true
+      }
+    ],
+    "source_versions_verified": {
+      "v1": "f388cfe146faba657370b0d40c5e21a763d36054cd51d2c20fc9e4eb0ff54b3d",
+      "v2": "7973c077ecaf7feed65e299e15002afcc5554b189205f9789c20a31805aa2a10"
+    }
+  },
+  "cuda_tests": {
+    "passed": 6,
+    "warnings": 1,
+    "duration_s": 4.14,
+    "result_line": "6 passed, 1 warning in 4.14s",
+    "original_artifact_sha256": "5e6d7e6ed297e5dc39646e3ea44a9ffb1fca887464e546bb2a8a0f0c3943a7bc"
+  },
+  "unforced_model_checks": {
+    "original_artifact_sha256": "942d39f1615363beaad894c66e5c60a535f366789db9f3773d46f3949d4da692",
+    "source_sha256": "f311660c8ab6dc06c9b67c3f50ff5a366f9338a15bba993224c3e1dc732ddc24",
+    "trace_sha256": "27e314db2365682ad7418d1c464230ece2bf3288d766a5ac693fd1c1485d4bb0",
+    "model_config_sha256": "a79e5ecab9fd389ae58655aae7d1f7599dc1335c14cf87b664203f5ddd84fd14",
+    "case_count": 16,
+    "note": "Four prefix lengths, three repeats plus first sample each; one source trajectory. KV and continuation equality are checked against held GPU KV. Full recomputation logprobs can differ.",
+    "cases": [
+      {
+        "first_sample_at_length": true,
+        "length": 128,
+        "repeat": -1,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.09748256206512451
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 128,
+        "repeat": 0,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.09748256206512451
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 128,
+        "repeat": 1,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.09748256206512451
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 128,
+        "repeat": 2,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.09748256206512451
+      },
+      {
+        "first_sample_at_length": true,
+        "length": 2048,
+        "repeat": -1,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 2048,
+        "repeat": 0,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 2048,
+        "repeat": 1,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 2048,
+        "repeat": 2,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      },
+      {
+        "first_sample_at_length": true,
+        "length": 8192,
+        "repeat": -1,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 8192,
+        "repeat": 0,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 8192,
+        "repeat": 1,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 8192,
+        "repeat": 2,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      },
+      {
+        "first_sample_at_length": true,
+        "length": 16384,
+        "repeat": -1,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 16384,
+        "repeat": 0,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 16384,
+        "repeat": 1,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      },
+      {
+        "first_sample_at_length": false,
+        "length": 16384,
+        "repeat": 2,
+        "kv_exact": true,
+        "greedy_equal": true,
+        "held_greedy_equal": true,
+        "held_logprob_max_abs": 0.0,
+        "logprob_max_abs": 0.0
+      }
+    ]
+  },
+  "loader_full_state_exact": true,
+  "ray_finish_and_sleep_wake": true,
+  "detail_file": "observations.json",
+  "new_full_grpo_measured": false
+}

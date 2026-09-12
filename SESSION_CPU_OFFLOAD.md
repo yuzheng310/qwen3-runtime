@@ -86,11 +86,37 @@ offload recommendation cannot be based only on the smaller baseline pool.
 
 ## Evidence and reproduction
 
+[Verification records](bench/results/session-cpu-offload/verification.json)
+publish check-level evidence for **58 archived replay executions**, **6 CUDA
+tests**, and **16 unforced real-model samples**. The 58 executions include
+repeated arms and first-use passes, not 58 independent workloads. The 16 samples
+cover four prefix lengths from one source trajectory, with three repeats and a
+first sample at each length. These counts are not additive test-suite totals.
+The CUDA test log reported one deprecation warning and no failures.
+
 [Numeric observations](bench/results/session-cpu-offload/observations.json)
 contain all first-use and measured runs for the four main cases, fresh-process
 loader records, source/trace hashes, and the independent full-weight and Ray
 checks. Only selected fields are published; original artifact hashes refer to
 unprojected archived records. This export is not a complete raw experiment archive.
+It contains 40 individual main-case replay records; the verification audit covers
+18 additional ancillary executions through their check results and artifact hashes.
+
+### Regenerate the README figures without a GPU
+
+```bash
+uv run --no-project --with matplotlib==3.11.2 python scripts/plot_session_offload.py
+```
+
+The plotting script reads the published observations, checks its warm-run medians
+against the archived summary, and emits PNG, SVG and
+[numeric figure provenance](docs/assets/performance/offload-figure-data.json).
+The boundary chart shows all available controls, all three warm samples and each
+first-use pass. All axes start at zero; the points are observations, not confidence
+intervals. The engineering chart separates loading/capacity improvements from
+completion cleanup, so those gains are not attributed to CPU-cache hits.
+
+### Replay requirements
 
 The retained-session group uses v1; other groups use v2. Their sole runtime
 difference is the nonblocking wait in `finish_session`, which retained-session
@@ -130,3 +156,26 @@ generation/finish/sleep/wake was checked with a synthetic trajectory envelope.
 was measured.** End-to-end validation remains pending. Keep CPU offload optional
 and evaluate useful restores, actual avoided prefill, transfer time, and complete
 step latency on the intended workload before enabling it in training.
+
+## Scope relative to general KV cache systems
+
+This implementation owns synchronous snapshots of paused sessions on one GPU.
+It already includes pinned-memory support, block-oriented transfers, version
+invalidation and restore rollback. Its CPU store is not a shared, content-addressed
+prefix cache across sessions or instances. Restoring a snapshot can reuse an
+already-cached GPU prefix and import only the missing blocks.
+
+[SGLang HiCache](https://docs.sglang.io/docs/advanced_features/hicache_design)
+organizes reusable prefixes across GPU, host and optional storage tiers and
+supports layerwise compute/load overlap.
+[vLLM's OffloadingConnector](https://docs.vllm.ai/en/latest/features/kv_offloading_usage/)
+provides chunk-based caching, configurable admission/eviction and tiered backends.
+[LMCache multiprocess mode](https://docs.lmcache.ai/mp/architecture.html)
+separates the cache service from inference engines and provides storage,
+prefetch and management components. These are architecture comparisons, not
+same-hardware performance measurements against this runtime.
+
+The current project stops at a validated, optional session-capacity mechanism.
+Shared CPU prefix blocks, asynchronous DMA and additional storage backends are
+future work only if a measured workload justifies their complexity. There is
+no claim of feature parity or production readiness comparable to those systems.
