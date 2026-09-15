@@ -16,7 +16,13 @@ from qwen3_runtime.utils.loader import load_from_directory
 PIN = Path(__file__).resolve().parents[2] / "docs" / "pins" / "Qwen3-4B" / "config.json"
 PIN_REPO = "Qwen/Qwen3-4B"
 PIN_REV = "1cfa9a7208912126459214e8b04321603b3df60c"
-CODESCOUT_PIN = Path(__file__).resolve().parents[2] / "docs" / "pins" / "CodeScout-4B" / "config.json"
+CODESCOUT_PIN = (
+    Path(__file__).resolve().parents[2]
+    / "docs"
+    / "pins"
+    / "CodeScout-4B"
+    / "config.json"
+)
 
 
 def resolve_pin(*, pin: bool = True, pin_path: str | Path | None = None) -> Path | None:
@@ -66,7 +72,9 @@ def eos_token_id_from_pin(pin_path: Path | None) -> int | None:
     return int(eos) if eos is not None else None
 
 
-def _num_kv_blocks(model, *, device: str, block_size: int, kv_budget: int | None) -> int:
+def _num_kv_blocks(
+    model, *, device: str, block_size: int, kv_budget: int | None
+) -> int:
     dtype_bytes = 2 if device == "cuda" else 4
     requested = kv_budget_bytes(kv_budget)
     budget = requested
@@ -75,7 +83,12 @@ def _num_kv_blocks(model, *, device: str, block_size: int, kv_budget: int | None
         physical = int(free * 0.90)
         if physical < requested:
             budget = physical
-    return max(32, num_kv_blocks_for_budget(model.cfg, budget, block_size, dtype_bytes=dtype_bytes))
+    return max(
+        32,
+        num_kv_blocks_for_budget(
+            model.cfg, budget, block_size, dtype_bytes=dtype_bytes
+        ),
+    )
 
 
 def kv_budget_bytes(budget: int | None = None) -> int:
@@ -112,9 +125,13 @@ def build_engine(
     ngram_min: int = 2,
     ngram_max: int = 4,
     session_cpu_offload: str = "off",
+    cpu_kv_backend: str = "snapshot",
     cpu_kv_max_bytes: int = 0,
     cpu_kv_pinned_max_bytes: int = 0,
     transfer_chunk_bytes: int = 8 * 1024 * 1024,
+    cpu_kv_slab_bytes: int = 0,
+    snapshot_mixed_restore: bool = False,
+    session_offload_early_fraction: float = 0.0,
 ) -> Engine:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if device == "cuda" else torch.float32
@@ -128,7 +145,9 @@ def build_engine(
         pin=resolve_pin(pin=pin, pin_path=pin_path),
         attention_backend=backend,
     )
-    num_blocks = _num_kv_blocks(model, device=device, block_size=block_size, kv_budget=kv_budget)
+    num_blocks = _num_kv_blocks(
+        model, device=device, block_size=block_size, kv_budget=kv_budget
+    )
     if split is None:
         split = device == "cuda"
     graph_max_kv = decode_graph_max_kv_for(
@@ -156,8 +175,12 @@ def build_engine(
         ngram_min=ngram_min,
         ngram_max=ngram_max,
         session_cpu_offload=session_cpu_offload,
+        cpu_kv_backend=cpu_kv_backend,
         cpu_kv_max_bytes=cpu_kv_max_bytes,
         cpu_kv_pinned_max_bytes=cpu_kv_pinned_max_bytes,
         transfer_chunk_bytes=transfer_chunk_bytes,
+        cpu_kv_slab_bytes=cpu_kv_slab_bytes,
+        snapshot_mixed_restore=snapshot_mixed_restore,
+        session_offload_early_fraction=session_offload_early_fraction,
     )
     return Engine(config, runner)

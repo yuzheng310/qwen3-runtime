@@ -20,6 +20,7 @@ would take A's session and A would pay a full re-prefill for nothing.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 
 
@@ -75,6 +76,11 @@ class SessionCache:
 
     max_blocks: int
     max_sessions: int = 16
+    # Read current ownership: offload/COW can change a table after parking.
+    # Count-only callers must supply non-overlapping block counts.
+    block_ids_for: Callable[[int], Iterable[int]] | None = field(
+        default=None, repr=False
+    )
 
     _sessions: dict[int, _Session] = field(default_factory=dict)
     _clock: int = 0
@@ -219,14 +225,20 @@ class SessionCache:
         while self._sessions and (
             len(self._sessions) > self.max_sessions or self._held_blocks() > self.max_blocks
         ):
-            oldest = min(self._sessions.values(), key=lambda s: s.stamp)
-            del self._sessions[oldest.request_id]
-            evicted.append(oldest.request_id)
-            self.stats["evicted"] += 1
+            request_id = self.evict_oldest()
+            if request_id is None:
+                break  # A reserved claim is owned by an in-progress admission.
+            evicted.append(request_id)
         return evicted
 
     def _held_blocks(self) -> int:
-        return sum(s.blocks for s in self._sessions.values())
+        if self.block_ids_for is None:
+            return sum(s.blocks for s in self._sessions.values())
+        return len({
+            block_id
+            for request_id in self._sessions
+            for block_id in self.block_ids_for(request_id)
+        })
 
     def _held_tokens(self) -> int:
         return sum(len(s.tokens) for s in self._sessions.values())

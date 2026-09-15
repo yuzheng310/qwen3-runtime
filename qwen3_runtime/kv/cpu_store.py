@@ -8,8 +8,8 @@ the engine owner thread decides when a snapshot is safe to create or remove.
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 import torch
 
@@ -47,11 +47,11 @@ class KVSnapshotMetadata:
 class KVReservation:
     metadata: KVSnapshotMetadata
     buffer: torch.Tensor
-    _store: "CpuKVStore"
+    _store: CpuKVStore
     _pinned: bool = False
     _state: str = "reserved"
 
-    def commit(self) -> "KVSnapshot":
+    def commit(self) -> KVSnapshot:
         return self._store.commit(self)
 
     def abort(self) -> None:
@@ -62,7 +62,7 @@ class KVReservation:
 class KVSnapshot:
     metadata: KVSnapshotMetadata
     buffer: torch.Tensor
-    _store: "CpuKVStore"
+    _store: CpuKVStore
     pinned: bool = False
 
     def delete(self) -> None:
@@ -77,6 +77,9 @@ class CpuKVStore:
             raise ValueError("max_bytes must be positive")
         if pinned_max_bytes < 0 or pinned_max_bytes > max_bytes:
             raise ValueError("pinned_max_bytes must be within max_bytes")
+        from qwen3_runtime.kv.host_budget import HostBudget
+
+        self.budget = HostBudget(max_bytes, pinned_max_bytes)
         self.max_bytes = int(max_bytes)
         self.pinned_max_bytes = int(pinned_max_bytes)
         self._reserved_bytes = 0
@@ -84,7 +87,8 @@ class CpuKVStore:
         self._pinned_bytes = 0
         self._reserved_pinned_bytes = 0
         self._clock = 0
-        self._snapshots: "OrderedDict[int, KVSnapshot]" = OrderedDict()
+        self._reservations = {}
+        self._snapshots: OrderedDict[int, KVSnapshot] = OrderedDict()
 
     @staticmethod
     def required_bytes(shape: Iterable[int], dtype: torch.dtype) -> int:
@@ -107,32 +111,19 @@ class CpuKVStore:
                 f"CPU KV budget exhausted: need {metadata.allocated_bytes}, "
                 f"available {self.max_bytes - self._committed_bytes - self._reserved_bytes}"
             )
-        try:
-            # Pinning is only meaningful when an accelerator exists.  CPU-only
-            # validation remains runnable on hosts without a pin-memory pool.
-            pin = bool(
-                self.pinned_max_bytes
-                and torch.cuda.is_available()
-                and self._pinned_bytes
-                + self._reserved_pinned_bytes
-                + metadata.allocated_bytes
-                <= self.pinned_max_bytes
-            )
-            # Keep each logical block's K/V and layers together in host memory.
-            # The public six-axis shape stays unchanged; block-range slices
-            # become contiguous DMA ranges after moving axis 2 to the front.
-            k, layers, blocks, offsets, heads, dim = metadata.shape
-            buffer = torch.empty(
-                (blocks, k, layers, offsets, heads, dim),
-                dtype=torch_dtype(metadata.dtype),
-                pin_memory=pin,
-            ).permute(1, 2, 0, 3, 4, 5)
-        except Exception:
-            raise
+        k, layers, blocks, offsets, heads, dim = metadata.shape
+        buffer = self.budget.allocate(
+            (blocks, k, layers, offsets, heads, dim), torch_dtype(metadata.dtype)
+        ).permute(1, 2, 0, 3, 4, 5)
+        pin = buffer.is_pinned()
         self._reserved_bytes += metadata.allocated_bytes
         if pin:
             self._reserved_pinned_bytes += metadata.allocated_bytes
-        return KVReservation(metadata=metadata, buffer=buffer, _store=self, _pinned=pin)
+        reservation = KVReservation(
+            metadata=metadata, buffer=buffer, _store=self, _pinned=pin
+        )
+        self._reservations[metadata.snapshot_id] = reservation
+        return reservation
 
     def commit(self, reservation: KVReservation) -> KVSnapshot:
         if reservation._store is not self or reservation._state != "reserved":
@@ -150,6 +141,7 @@ class CpuKVStore:
         )
         self._snapshots[sid] = snapshot
         reservation._state = "committed"
+        self._reservations.pop(sid, None)
         self._touch(sid)
         return snapshot
 
@@ -160,6 +152,7 @@ class CpuKVStore:
         if reservation._pinned:
             self._reserved_pinned_bytes -= reservation.metadata.allocated_bytes
         reservation._state = "aborted"
+        self._reservations.pop(reservation.metadata.snapshot_id, None)
 
     def get(self, snapshot_id: int) -> KVSnapshot | None:
         snapshot = self._snapshots.get(int(snapshot_id))
@@ -183,6 +176,8 @@ class CpuKVStore:
         return None
 
     def invalidate_all(self) -> list[KVSnapshot]:
+        for reservation in list(self._reservations.values()):
+            self.abort(reservation)
         removed = list(self._snapshots.values())
         self._snapshots.clear()
         self._committed_bytes = 0
@@ -191,6 +186,7 @@ class CpuKVStore:
 
     def stats(self) -> dict[str, int]:
         return {
+            **self.budget.stats(),
             "max_bytes": self.max_bytes,
             "committed_bytes": self._committed_bytes,
             "reserved_bytes": self._reserved_bytes,

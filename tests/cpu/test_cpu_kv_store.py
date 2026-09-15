@@ -3,11 +3,17 @@ from __future__ import annotations
 import pytest
 import torch
 
-from qwen3_runtime.kv.cpu_store import CpuKVCapacityError, CpuKVStore, KVSnapshotMetadata
+from qwen3_runtime.kv.cpu_store import (
+    CpuKVCapacityError,
+    CpuKVStore,
+    KVSnapshotMetadata,
+)
 from qwen3_runtime.kv.paged import PagedKVPool
 
 
-def _meta(snapshot_id: int, shape: tuple[int, ...], allocated: int) -> KVSnapshotMetadata:
+def _meta(
+    snapshot_id: int, shape: tuple[int, ...], allocated: int
+) -> KVSnapshotMetadata:
     return KVSnapshotMetadata(
         session_key="s",
         request_id=1,
@@ -44,6 +50,12 @@ def test_cpu_store_reserve_commit_abort_and_budget_accounting():
     assert removed is snapshot
     assert store.stats()["committed_bytes"] == 0
 
+    # Deleting an index entry does not release storage still held by a caller.
+    assert store.stats()["managed_host_buffer_bytes"] == nbytes
+    with pytest.raises(CpuKVCapacityError):
+        store.reserve(_meta(3, shape, nbytes))
+    del removed, snapshot, reservation
+    assert store.stats()["managed_host_buffer_bytes"] == 0
     reservation = store.reserve(_meta(3, shape, nbytes))
     reservation.abort()
     assert store.stats()["reserved_bytes"] == 0

@@ -64,3 +64,30 @@ def test_seeded_hold_kv_output_unchanged_with_prefix_cache():
         return eng.drain_request(rid)
 
     assert run(cache=False) == run(cache=True)
+
+
+def test_cold_batch_duplicate_remains_reusable_after_first_copy_eviction():
+    torch.manual_seed(42)
+    model = Qwen3ForCausalLM(tiny_config()).eval()
+    prompt = [1, 2, 3, 4, 5]
+    eng = _engine(model, cache=True)
+    a, b = [eng.add_request(prompt.copy(), max_tokens=1, hold_kv=True) for _ in range(2)]
+    eng.step()
+    bm = eng.block_manager
+    a_page = eng._requests[a].block_table[0]
+    b_table = eng._requests[b].block_table.copy()
+    assert a_page != b_table[0]
+    eng.finish_request(a)
+    bm.reclaim_cached_blocks(bm.num_free_blocks + 1)
+    assert bm._ref_count[a_page] == 0
+    c = eng.add_request(prompt.copy(), max_tokens=3)
+    assert eng._requests[c].block_table == [b_table[0]]
+    assert eng._requests[c].cached_tokens == 4
+    assert eng._requests[b].block_table == b_table
+    got = eng.drain_request(c)
+    expected = _engine(model, cache=False).generate(prompt.copy(), max_tokens=3)
+    assert got == expected
+    eng.finish_request(b)
+    bm.reclaim_cached_blocks(bm.num_blocks)
+    assert bm.num_free_blocks == bm.num_blocks
+    assert bm.cache_blocks == 0

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Sequence
+from dataclasses import dataclass
+
+import time
 
 import torch
 
@@ -37,6 +39,22 @@ class PagedKVPool:
         dtype: torch.dtype,
         device: torch.device,
     ):
+        self.transfer_stats = dict(
+            d2h_completed_bytes=0,
+            d2h_unconfirmed_bytes=0,
+            h2d_unconfirmed_bytes=0,
+            h2d_completed_bytes=0,
+            d2h_attempted_bytes=0,
+            h2d_attempted_bytes=0,
+            d2h_calls=0,
+            h2d_calls=0,
+            synchronize_calls=0,
+            synchronize_s=0.0,
+            blocking_copy_calls=0,
+            staging_allocation_s=0.0,
+            staging_allocation_calls=0,
+            gpu_staging_peak_bytes=0,
+        )
         self.num_layers = num_layers
         self.num_blocks = num_blocks
         self.block_size = block_size
@@ -134,27 +152,56 @@ class PagedKVPool:
         device_blocks = self.cache.permute(2, 0, 1, 3, 4, 5)
         host_blocks = destination.permute(2, 0, 1, 3, 4, 5)
         indices = torch.tensor(ids, dtype=torch.long, device=self.cache.device)
+        allocation_start = time.perf_counter()
         staging = torch.empty(
             (min(blocks_per_chunk, len(ids)), *device_blocks.shape[1:]),
             dtype=self.cache.dtype,
             device=self.cache.device,
+        )
+        self.transfer_stats["staging_allocation_s"] += (
+            time.perf_counter() - allocation_start
+        )
+        self.transfer_stats["staging_allocation_calls"] += 1
+        self.transfer_stats["gpu_staging_peak_bytes"] = max(
+            self.transfer_stats["gpu_staging_peak_bytes"],
+            staging.numel() * staging.element_size() if self.cache.is_cuda else 0,
         )
         async_copy = (
             self.cache.is_cuda
             and destination.is_pinned()
             and host_blocks.is_contiguous()
         )
+        completed_before = self.transfer_stats["d2h_completed_bytes"]
         try:
             for start in range(0, len(ids), blocks_per_chunk):
                 end = min(len(ids), start + blocks_per_chunk)
                 chunk = staging[: end - start]
                 torch.index_select(device_blocks, 0, indices[start:end], out=chunk)
+                self.transfer_stats["d2h_attempted_bytes"] += (end - start) * per_block
                 host_blocks[start:end].copy_(chunk, non_blocking=async_copy)
+                self.transfer_stats["d2h_completed_bytes"] += (end - start) * per_block
+                self.transfer_stats["d2h_calls"] += 1
+                self.transfer_stats["blocking_copy_calls"] += int(
+                    self.cache.is_cuda and not async_copy
+                )
         finally:
             # This API remains synchronous: host ownership is committed only
             # after every copy completes, including when a later chunk fails.
             if async_copy:
-                torch.cuda.current_stream(self.cache.device).synchronize()
+                sync_start = time.perf_counter()
+                try:
+                    torch.cuda.current_stream(self.cache.device).synchronize()
+                except BaseException:
+                    self.transfer_stats["d2h_unconfirmed_bytes"] += (
+                        self.transfer_stats["d2h_completed_bytes"] - completed_before
+                    )
+                    self.transfer_stats["d2h_completed_bytes"] = completed_before
+                    raise
+                finally:
+                    self.transfer_stats["synchronize_s"] += (
+                        time.perf_counter() - sync_start
+                    )
+                self.transfer_stats["synchronize_calls"] += 1
         if valid_tokens == 0:
             destination.zero_()
         else:
@@ -197,18 +244,29 @@ class PagedKVPool:
         device_blocks = self.cache.permute(2, 0, 1, 3, 4, 5)
         host_blocks = source.permute(2, 0, 1, 3, 4, 5)
         indices = torch.tensor(ids, dtype=torch.long, device=self.cache.device)
+        allocation_start = time.perf_counter()
         staging = torch.empty(
             (min(blocks_per_chunk, len(ids)), *device_blocks.shape[1:]),
             dtype=self.cache.dtype,
             device=self.cache.device,
         )
+        self.transfer_stats["staging_allocation_s"] += (
+            time.perf_counter() - allocation_start
+        )
+        self.transfer_stats["staging_allocation_calls"] += 1
+        self.transfer_stats["gpu_staging_peak_bytes"] = max(
+            self.transfer_stats["gpu_staging_peak_bytes"],
+            staging.numel() * staging.element_size() if self.cache.is_cuda else 0,
+        )
         async_copy = (
             self.cache.is_cuda and source.is_pinned() and host_blocks.is_contiguous()
         )
+        completed_before = self.transfer_stats["h2d_completed_bytes"]
         try:
             for start in range(0, len(ids), blocks_per_chunk):
                 end = min(len(ids), start + blocks_per_chunk)
                 chunk = staging[: end - start]
+                self.transfer_stats["h2d_attempted_bytes"] += (end - start) * per_block
                 chunk.copy_(
                     host_blocks[
                         source_block_offset + start : source_block_offset + end
@@ -216,9 +274,27 @@ class PagedKVPool:
                     non_blocking=async_copy,
                 )
                 device_blocks.index_copy_(0, indices[start:end], chunk)
+                self.transfer_stats["h2d_completed_bytes"] += (end - start) * per_block
+                self.transfer_stats["h2d_calls"] += 1
+                self.transfer_stats["blocking_copy_calls"] += int(
+                    self.cache.is_cuda and not async_copy
+                )
         finally:
             if async_copy:
-                torch.cuda.current_stream(self.cache.device).synchronize()
+                sync_start = time.perf_counter()
+                try:
+                    torch.cuda.current_stream(self.cache.device).synchronize()
+                except BaseException:
+                    self.transfer_stats["h2d_unconfirmed_bytes"] += (
+                        self.transfer_stats["h2d_completed_bytes"] - completed_before
+                    )
+                    self.transfer_stats["h2d_completed_bytes"] = completed_before
+                    raise
+                finally:
+                    self.transfer_stats["synchronize_s"] += (
+                        time.perf_counter() - sync_start
+                    )
+                self.transfer_stats["synchronize_calls"] += 1
 
     def gather(
         self,

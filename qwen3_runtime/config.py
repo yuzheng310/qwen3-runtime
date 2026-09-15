@@ -27,28 +27,47 @@ class Config:
     num_speculative_tokens: int = 0
     ngram_min: int = 2
     ngram_max: int = 4
-    # Session CPU KV offload is deliberately opt-in.  ``async`` is reserved
-    # for a future event-backed implementation and is rejected by Engine.
+    # Async mode overlaps snapshot D2H only; H2D and explicit saves remain synchronous.
     session_cpu_offload: str = "off"
+    cpu_kv_backend: str = "snapshot"
     cpu_kv_max_bytes: int = 0
     cpu_kv_pinned_max_bytes: int = 0
     transfer_chunk_bytes: int = 8 * 1024 * 1024
+    # 0 preserves legacy slab sizing; positive values decouple host allocation.
+    cpu_kv_slab_bytes: int = 0
+    snapshot_mixed_restore: bool = False
+    session_offload_early_fraction: float = 0.0
     max_inflight_transfers: int = 1
     restore_wait_budget: int = 1
 
     def __post_init__(self) -> None:
+        if self.cpu_kv_backend not in {"snapshot", "block"}:
+            raise ValueError("cpu_kv_backend must be snapshot or block")
         if self.num_speculative_tokens < 0:
             raise ValueError("num_speculative_tokens must be non-negative")
         if self.ngram_min < 1 or self.ngram_max < self.ngram_min:
             raise ValueError("ngram window must satisfy 1 <= ngram_min <= ngram_max")
         if self.session_cpu_offload not in {"off", "sync", "async"}:
             raise ValueError("session_cpu_offload must be one of: off, sync, async")
-        if self.session_cpu_offload == "sync" and self.cpu_kv_max_bytes <= 0:
-            raise ValueError("cpu_kv_max_bytes must be positive when CPU offload is enabled")
+        if self.session_cpu_offload in {"sync", "async"} and self.cpu_kv_max_bytes <= 0:
+            raise ValueError(
+                "cpu_kv_max_bytes must be positive when CPU offload is enabled"
+            )
+        if self.session_cpu_offload == "async" and self.cpu_kv_backend != "snapshot":
+            raise ValueError("async currently supports snapshot backend only")
+        if not 0 <= self.session_offload_early_fraction <= 0.5:
+            raise ValueError("early free fraction must be between 0 and 0.5")
         if self.cpu_kv_max_bytes < 0 or self.cpu_kv_pinned_max_bytes < 0:
             raise ValueError("CPU KV budgets must be non-negative")
-        if self.cpu_kv_pinned_max_bytes > self.cpu_kv_max_bytes and self.cpu_kv_max_bytes:
-            raise ValueError("pinned CPU KV budget is part of, not extra to, the CPU budget")
+        if (
+            self.cpu_kv_pinned_max_bytes > self.cpu_kv_max_bytes
+            and self.cpu_kv_max_bytes
+        ):
+            raise ValueError(
+                "pinned CPU KV budget is part of, not extra to, the CPU budget"
+            )
+        if self.cpu_kv_slab_bytes < 0:
+            raise ValueError("cpu_kv_slab_bytes must be non-negative")
         if self.transfer_chunk_bytes <= 0:
             raise ValueError("transfer_chunk_bytes must be positive")
         if self.max_inflight_transfers != 1:

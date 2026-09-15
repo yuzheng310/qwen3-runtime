@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable
 
-from qwen3_runtime.engine.prefix_cache import PrefixCache, ROOT_HASH, block_hash
+from qwen3_runtime.engine.prefix_cache import ROOT_HASH, PrefixCache, block_hash
 from qwen3_runtime.engine.request import Request
 
 BlockCopier = Callable[[int, int], None]
@@ -41,7 +41,9 @@ class BlockManager:
         self._ref_count = [0] * num_blocks
         self._cache = PrefixCache()
         self._copy_block: BlockCopier | None = None
-        self.epoch = 0  # bumped on reset(); leftover tables from a prior epoch are stale
+        self.epoch = (
+            0  # bumped on reset(); leftover tables from a prior epoch are stale
+        )
 
     def set_block_copier(self, copy_block: BlockCopier | None) -> None:
         self._copy_block = copy_block
@@ -102,11 +104,19 @@ class BlockManager:
             self._decref(block_id)
         req.block_table.clear()
 
+    def reclaimable_blocks(self, requests):
+        from collections import Counter
+
+        refs = Counter(b for r in requests for b in r.block_table)
+        cache_refs = Counter(b for _, b in self._cache.lru_items())
+        return sum(self._ref_count[b] == n + cache_refs[b] for b, n in refs.items())
+
     def resource_view(self) -> dict[str, int]:
         """A physical view; logical request lengths are intentionally absent."""
         unique = sum(refs > 0 for refs in self._ref_count)
+        cached_ids = {b for _, b in self._cache.lru_items()}
         cache_only = sum(
-            refs == 1 and any(cached_id == block_id for _h, cached_id in self._cache.lru_items())
+            refs == 1 and block_id in cached_ids
             for block_id, refs in enumerate(self._ref_count)
         )
         return {
@@ -144,8 +154,7 @@ class BlockManager:
         needed = self.blocks_needed_for(num_tokens)
         while len(req.block_table) > needed:
             self._decref(req.block_table.pop())
-        if req.n_published_blocks > needed:
-            req.n_published_blocks = needed
+        req.n_published_blocks = min(req.n_published_blocks, needed)
 
     def attach_cached_prefix(self, req: Request) -> int:
         """Share full cached prefix blocks. Sets num_computed_tokens and cached_tokens."""
@@ -167,11 +176,11 @@ class BlockManager:
             bid = self._cache.lookup(h)
             if bid is None or self._ref_count[bid] <= 0:
                 if bid is not None:
-                    self._cache.drop(h)
+                    self._cache.drop(h, bid)
                 break
             self._incref(bid)
             req.block_table.append(bid)
-            self._cache.touch(h)
+            self._cache.touch(h, bid)
             parent = h
             cached += bs
         req.num_computed_tokens = cached
@@ -202,14 +211,16 @@ class BlockManager:
         cached = 0
         full_blocks = num_tokens // self.block_size
         for index in range(full_blocks):
-            block_tokens = tokens[index * self.block_size : (index + 1) * self.block_size]
+            block_tokens = tokens[
+                index * self.block_size : (index + 1) * self.block_size
+            ]
             h = block_hash(parent, block_tokens)
             bid = self._cache.lookup(h)
             if bid is None or self._ref_count[bid] <= 0:
                 break
             self._incref(bid)
             req.block_table.append(bid)
-            self._cache.touch(h)
+            self._cache.touch(h, bid)
             parent = h
             cached += self.block_size
         req.num_computed_tokens = cached
@@ -271,14 +282,14 @@ class BlockManager:
     def _evict_unused(self, n_blocks: int) -> None:
         if not self.enable_prefix_cache or n_blocks <= 0:
             return
-        victims: list[bytes] = []
+        victims: list[tuple[bytes, int]] = []
         for h, bid in self._cache.lru_items():
             if self._ref_count[bid] == 1:
-                victims.append(h)
+                victims.append((h, bid))
                 if len(victims) >= n_blocks:
                     break
-        for h in victims:
-            bid = self._cache.drop(h)
+        for h, bid in victims:
+            bid = self._cache.drop(h, bid)
             if bid is not None:
                 self._decref(bid)
 

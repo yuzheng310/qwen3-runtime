@@ -16,7 +16,9 @@ class Engine:
     def __init__(self, config: Config, runner: ModelRunner):
         self.config = config
         if config.num_kv_blocks is None:
-            raise ValueError("num_kv_blocks must be set (factory computes it from free VRAM)")
+            raise ValueError(
+                "num_kv_blocks must be set (factory computes it from free VRAM)"
+            )
         self.block_manager = BlockManager(
             num_blocks=config.num_kv_blocks,
             block_size=config.block_size,
@@ -33,10 +35,20 @@ class Engine:
         # one value however many tokens the step emitted, and which is gone
         # entirely once a finished request is popped below.
         self.last_emitted_logprobs: dict[int, list[float]] = {}
+        self._fatal_error = None
         self._asleep = False
         self.last_sleep_memory: dict | None = None
         self.last_aborted_ids: list[int] = []
-        self.session_offload = SessionOffloadManager(self)
+        if config.session_cpu_offload == "async":
+            from qwen3_runtime.engine.async_offload import AsyncSnapshotOffloadManager
+
+            self.session_offload = AsyncSnapshotOffloadManager(self)
+        elif config.cpu_kv_backend == "block" and config.session_cpu_offload == "sync":
+            from qwen3_runtime.engine.block_offload import BlockOffloadManager
+
+            self.session_offload = BlockOffloadManager(self)
+        else:
+            self.session_offload = SessionOffloadManager(self)
 
     def add_request(
         self,
@@ -51,10 +63,14 @@ class Engine:
         forced_tokens: list[int] | None = None,
         tokenizer=None,
     ) -> int:
+        self._check_health()
         from qwen3_runtime.serving.detokenizer import attach_detokenizer
 
         detok, strings = attach_detokenizer(
-            tokenizer, token_ids, stop_strings, sampling.stop_strings if sampling else ()
+            tokenizer,
+            token_ids,
+            stop_strings,
+            sampling.stop_strings if sampling else (),
         )
         req = Request(
             token_ids=token_ids,
@@ -87,9 +103,13 @@ class Engine:
         stop_token_ids: tuple[int, ...] | None = None,
         forced_tokens: list[int] | None = None,
     ) -> None:
+        self._check_health()
         req = self._requests[request_id]
         if self._asleep:
             raise RuntimeError("engine is asleep; wake_up() before resume_request")
+        wait_for = getattr(self.session_offload, "wait_for", None)
+        if wait_for is not None:
+            wait_for(request_id)
         restore_ticket = None
         if req.kv_residency == "cpu":
             restore_ticket = self.session_offload.begin_restore(req)
@@ -187,7 +207,24 @@ class Engine:
     def drain_request(self, request_id: int) -> list[int]:
         return list(self.stream_request(request_id))
 
+    def _check_health(self):
+        if self._fatal_error is not None:
+            raise RuntimeError(
+                "engine terminated after fatal device error: " + self._fatal_error
+            )
+
     def step(self) -> list[tuple[int, int | None, bool]]:
+        self._check_health()
+        try:
+            return self._step_impl()
+        except BaseException as exc:
+            from qwen3_runtime.engine.session_offload import fatal_device_error
+
+            if fatal_device_error(exc):
+                self._fatal_error = str(exc)
+            raise
+
+    def _step_impl(self) -> list[tuple[int, int | None, bool]]:
         preempt_before = self.scheduler.num_preemptions
         reqs = self.scheduler.schedule()
         self.last_emitted = {}
@@ -195,7 +232,9 @@ class Engine:
         if not reqs:
             self.last_step_stats = None
             if self.scheduler.waiting or self.scheduler.running:
-                raise RuntimeError("scheduler produced an empty step while requests remain")
+                raise RuntimeError(
+                    "scheduler produced an empty step while requests remain"
+                )
             return []
         counts = self._collect_step_stats(reqs, preempt_before)
         spec_reqs = [req for req in reqs if req.spec_draft_len]
@@ -207,11 +246,16 @@ class Engine:
             self._run_normal_step(rest, token_by_id, finished_ids)
         self.last_step_stats = {**counts, **spec_stats}
         result = [
-            (req.request_id, token_by_id[req.request_id], req.request_id in finished_ids)
+            (
+                req.request_id,
+                token_by_id[req.request_id],
+                req.request_id in finished_ids,
+            )
             for req in reqs
         ]
         for req in reqs:
             if req.status == RequestStatus.FINISHED:
+                self.session_offload.remove(req.request_id)
                 self._requests.pop(req.request_id, None)
         return result
 
@@ -273,6 +317,8 @@ class Engine:
         # staleness the driver used to have with ``last_logprob``.
         scored_before = [len(req.logprobs) for req in rest]
         rest_toks = self.runner.run(rest)
+        if hasattr(self.session_offload, "mark_used"):
+            self.session_offload.mark_used(rest)
         for req in self.scheduler.postprocess(rest, rest_toks):
             finished_ids.add(req.request_id)
         for req, tok, n_before in zip(rest, rest_toks, scored_before):
@@ -310,8 +356,14 @@ class Engine:
             "preempts": self.scheduler.num_preemptions - preempt_before,
         }
 
-    def generate(self, token_ids: list[int], max_tokens: int = 16, **kwargs) -> list[int]:
-        return list(self.stream_request(self.add_request(token_ids, max_tokens=max_tokens, **kwargs)))
+    def generate(
+        self, token_ids: list[int], max_tokens: int = 16, **kwargs
+    ) -> list[int]:
+        return list(
+            self.stream_request(
+                self.add_request(token_ids, max_tokens=max_tokens, **kwargs)
+            )
+        )
 
     def invalidate_all_kv(self) -> None:
         """Drop every block. Held sessions become empty-KV restarts, never stale tables."""
@@ -321,8 +373,11 @@ class Engine:
             req.reset_kv_state()
         self.block_manager.reset()
 
-    def offload_request(self, request_id: int, *, session_key: str | None = None) -> None:
+    def offload_request(
+        self, request_id: int, *, session_key: str | None = None
+    ) -> None:
         """Synchronously save one paused request and release its physical blocks."""
+        self._check_health()
         req = self._requests.get(request_id)
         if req is None:
             raise KeyError(request_id)
@@ -352,7 +407,10 @@ class Engine:
         *,
         invalidate_kv: bool = True,
     ) -> list[str]:
-        from qwen3_runtime.rollout.lifecycle import apply_named_weights, park_live_sessions
+        from qwen3_runtime.rollout.lifecycle import (
+            apply_named_weights,
+            park_live_sessions,
+        )
 
         if invalidate_kv:
             # Invalidate before the first parameter write.  If the update

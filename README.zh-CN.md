@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="许可证" src="https://img.shields.io/badge/license-Apache--2.0-4C8BF5?style=flat-square"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"></a>
   <a href="docs/pins/Qwen3-4B/config.json"><img alt="模型" src="https://img.shields.io/badge/model-Qwen3-7C3AED?style=flat-square"></a>
-  <a href="TEST_RESULTS.md"><img alt="测试" src="https://img.shields.io/badge/tests-365%20passed-2EA44F?style=flat-square"></a>
+  <a href="TEST_RESULTS.md"><img alt="测试" src="https://img.shields.io/badge/tests-488%20passed-2EA44F?style=flat-square"></a>
 </p>
 
 <p>
@@ -36,7 +36,7 @@
 | 能力 | 实现方式 |
 |---|---|
 | 跨轮次保留 KV | 生成后暂停 session，复用精确的 token 前缀，仅 prefill 新增后缀；历史不一致时重新计算。 |
-| 可选 CPU KV | 对暂停 session 使用有界同步快照，检查版本、处理容量不足，并支持显式结束清理；默认关闭。 |
+| 可选 CPU KV | 支持 Snapshot 与块级去重后端、GPU/CPU 混合恢复和整组回收；实验性异步仅覆盖快照提前 D2H。默认关闭。 |
 | 并发 rollout | 统一 engine driver 接收异步请求，通过 continuous batching、chunked prefill、Paged KV 与内存感知调度执行。 |
 | 采样与 logprob | 支持 temperature、top-k/top-p/min-p、penalty、带 seed 的采样与逐 token logprob；rollout 输出保持 token 和 logprob 数量一致。 |
 | 推测解码 | 由目标模型验证 n-gram 候选，回滚未接受部分的 KV。 |
@@ -47,7 +47,28 @@
 
 ## Rollout 机制带来的实际变化
 
-### 可选 CPU KV offload：展示收益，也验证边界
+### 9 月 15 日：会话感知的分层 KV
+
+已实现完整块 CPU 去重、私有尾块版本、GPU/CPU 混合恢复、共享物理页去重计费，以及回收前整组容量预留。
+实验性异步模式仅覆盖快照提前 D2H，H2D 与紧急保存仍同步；offload 默认关闭。
+
+Qwen3-4B / RTX 4090 D（24 GiB），24 轨迹 / 102 轮 / 9,871 个固定输出 token，合成工具等待 1 秒，每组 3 次：
+
+| 方案 | 受管理 CPU / pinned KV | 端到端耗时中位数 | D2H |
+|---|---|---:|---:|
+| vLLM 0.29.0 APC | 0 / 0 | 155.803 s | 0 GiB |
+| vLLM APC + 原生 CPU offload | 4 / 4 GiB | 157.358 s | 113.199 GiB |
+| 本项目同步 Snapshot | 4 / 4 GiB | 158.217 s | 86.605 GiB |
+| 本项目同步 Block | 4 / 4 GiB | **154.103 s** | **64.553 GiB** |
+
+在相同 5,922 块 GPU KV 池下，Block 相对 vLLM offload 组耗时减少 **2.07%**、D2H 减少 **42.97%**、prefill 减少 **7.16%**；
+相对本项目 Snapshot，耗时减少 **2.60%**、D2H 减少 **25.46%**。
+这是小样本描述性结果，会话保留及回放适配存在差异，受管理 KV 预算也不等于进程内存上限，不能据此推断稳定排名或 RL 数值等价。
+另一次 8/4 GiB Snapshot 实验中，**提前异步 D2H 未获得端到端收益**。
+
+[设计、配置、逐次耗时与适用边界](KV_CACHE.md) · [逐次指标](bench/results/kv-tiered/comparison.json) · [汇总复算脚本](scripts/summarize_kv_comparison.py)。
+
+### 9 月 12 日历史 CPU KV offload：收益与边界
 
 ![三个容量与并发场景下的 CPU offload 对照，包含逐次测量与首次运行](docs/assets/performance/offload-boundary.png)
 
@@ -93,7 +114,7 @@ APC，所以图中按具体实验标注方案；公开数据也保存了各组�
 
 | 检查 | 已记录证据 | 说明了什么 |
 |---|---|---|
-| 公开版 CPU 测试 | **365 通过 / 24 跳过**；[测试摘要](TEST_RESULTS.md) | 公开源码行为；依赖可选资源的检查仍跳过 |
+| 公开版 CPU 测试 | **488 通过 / 25 跳过**；[测试摘要](TEST_RESULTS.md) | 公开源码行为；依赖可选资源的检查仍跳过 |
 | 历史 CUDA 测试 | **6 通过**；[验证记录](bench/results/session-cpu-offload/verification.json) | 真实 GPU 的保存、恢复与 offload 路径 |
 | 非强制输出的模型检查 | **16 个样本**，前缀 128–16,384 token；[逐项记录](bench/results/session-cpu-offload/verification.json) | KV 逐位一致；与 GPU 保留路径的续写及 logprob 一致 |
 | 回放审计 | **58 次执行**，含重复组与首次运行；[审计记录](bench/results/session-cpu-offload/verification.json) | 源码/轨迹关联、字节守恒及最终清理；不是 58 个独立工作负载 |
@@ -323,7 +344,7 @@ workload 的优化空间，不是实测加速比或保证的缓存命中率。�
 
 ## 验证与限制
 
-最近一次[测试记录](TEST_RESULTS.md)：CPU 上 **365 通过、24 跳过**，wheel 与源码
+最近一次[测试记录](TEST_RESULTS.md)：CPU 上 **488 通过、25 跳过**，wheel 与源码
 包构建成功。测试覆盖 session 隔离、CPU KV 保存/恢复与容量处理、显式结束清理、
 权重失效、token/logprob 对齐、采样与 speculative commit/rollback。
 跳过项依赖可选 GPU、模型、后端或 replay token 资源。独立的

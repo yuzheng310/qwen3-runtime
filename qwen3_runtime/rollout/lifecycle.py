@@ -262,10 +262,12 @@ def wake_engine(engine: Any, tags: object | None = None) -> None:
 def abort_generation(engine: Any) -> list[int]:
     aborted: list[int] = []
     targets = list(engine.scheduler.waiting) + list(engine.scheduler.running)
+    pending = getattr(getattr(engine, "session_offload", None), "pending", None)
     targets += [
         req
         for req in engine.scheduler.paused.values()
         if getattr(req, "kv_residency", "none") == "cpu"
+        or (pending is not None and pending.req is req)
     ]
     for req in targets:
         rid = req.request_id

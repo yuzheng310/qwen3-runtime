@@ -1,17 +1,17 @@
 {
   "status": "passed",
-  "timestamp": "2026-09-12T18:09:38.366777+08:00",
-  "command": "uv run --frozen python -m pytest tests/ -o addopts='' -q --junitxml=<local-output>",
+  "timestamp": "2026-09-15T16:48:50.597176+08:00",
+  "command": ".venv/bin/python -m pytest tests/ -o addopts='' -q -ra --junitxml=<local-output>",
   "python": "3.13.12",
   "platform": "macOS ARM64",
-  "tests": 389,
-  "passed": 365,
-  "skipped": 24,
+  "tests": 513,
+  "passed": 488,
+  "skipped": 25,
   "failures": 0,
   "errors": 0,
-  "duration_s": 4.122,
-  "runtime_and_test_source_sha256": "32817540c8ba3d000ba8a32833518fe1213842b122b192756d0c3665347e9203",
+  "duration_s": 4.161,
+  "runtime_and_test_source_sha256": "8e6ea68e87ae54b5798ee158e31af6acfb83bae3f0c831683729128bccd57ac0",
   "digest_method": "SHA256 of sorted runtime paths then sorted test paths, each relative POSIX path followed by file bytes",
-  "build": "uv build: wheel and source distribution passed",
-  "scope": "Public snapshot CPU verification; resource-dependent tests skipped. GPU evidence and GRPO limits are recorded separately."
+  "build": "uv build --offline --no-build-isolation: wheel and source distribution passed",
+  "scope": "Public snapshot CPU verification; CUDA/model/private-corpus dependent checks skipped. No GPU measurements or complete GRPO comparison were rerun for publication."
 }

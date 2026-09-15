@@ -1,4 +1,9 @@
-# Optional session KV offload
+# Historical synchronous session KV offload (September 12)
+
+This document describes the September 12 snapshot implementation and measurements.
+The current block backend, physical-page accounting and experimental async snapshot
+path are documented in [the September 15 update](KV_CACHE.md). Numbers below retain
+their original hardware, budget and source scope.
 
 The runtime can synchronously save paused session KV in a bounded CPU store
 and restore it when the trajectory continues. It remains **disabled by default**.
@@ -13,7 +18,7 @@ evicted and recomputed, with a cost for host allocation and both transfer direct
   recomputation. A snapshot larger than the entire CPU budget is rejected before
   evicting other useful snapshots.
 - The CPU budget includes pinned memory; it is not an additional allocation.
-  Save/restore are synchronous. `async` offload is not implemented.
+  Save/restore are synchronous. `async` offload was not implemented in this measured version.
 - Explicit `finish_session(final_token_ids)` releases only a unique, unclaimed,
   exact completed history. Waiting for the engine owner does not block the caller's
   event loop. A missing/error trajectory is not guessed to be complete.
@@ -192,6 +197,7 @@ prefetch and management components. These are architecture comparisons, not
 same-hardware performance measurements against this runtime.
 
 The current project stops at a validated, optional session-capacity mechanism.
-Shared CPU prefix blocks, asynchronous DMA and additional storage backends are
-future work only if a measured workload justifies their complexity. There is
+At this historical checkpoint, shared CPU prefix blocks and asynchronous DMA
+were future work. The September 15 update implements a bounded subset.
+Additional storage backends remain outside the implementation. There is
 no claim of feature parity or production readiness comparable to those systems.

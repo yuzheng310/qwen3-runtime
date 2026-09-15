@@ -12,7 +12,7 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-4C8BF5?style=flat-square"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"></a>
   <a href="docs/pins/Qwen3-4B/config.json"><img alt="Model" src="https://img.shields.io/badge/model-Qwen3-7C3AED?style=flat-square"></a>
-  <a href="TEST_RESULTS.md"><img alt="Tests" src="https://img.shields.io/badge/tests-365%20passed-2EA44F?style=flat-square"></a>
+  <a href="TEST_RESULTS.md"><img alt="Tests" src="https://img.shields.io/badge/tests-488%20passed-2EA44F?style=flat-square"></a>
 </p>
 
 <p>
@@ -39,7 +39,7 @@ scheduling, state management, and integration code.
 | Capability | Implementation |
 |---|---|
 | Persistent session KV | Pause between turns; reuse exact token prefixes and prefill the appended suffix. Divergent histories restart instead of reusing incompatible state. |
-| Optional CPU KV | Bounded synchronous snapshots for paused sessions; version checks, capacity fallback, and explicit completion cleanup. Disabled by default. |
+| Optional CPU KV | Snapshot and deduplicated block backends, mixed GPU/CPU restore, and group reclamation; experimental early async snapshot D2H. Disabled by default. |
 | Concurrent rollouts | A shared engine driver admits asynchronous turns into continuous batches, with chunked prefill, paged KV, and memory-aware scheduling. |
 | Sampling and logprobs | Temperature, top-k/top-p/min-p, penalties, seeded sampling, and per-token logprobs; rollout outputs keep token and logprob lengths aligned. |
 | Speculative decoding | N-gram proposals verified by the target model, with rejected KV rolled back. |
@@ -50,7 +50,36 @@ scheduling, state management, and integration code.
 
 ## What the rollout mechanisms changed
 
-### Optional CPU KV offload: measured gains and limits
+### September 15: session-aware tiered KV
+
+The runtime now includes full-block CPU deduplication, private versioned tails,
+GPU/CPU mixed restoration, shared physical-page accounting, and group reservation
+before reclamation. Experimental async mode overlaps early snapshot D2H only;
+H2D and emergency saves remain synchronous. All offload remains opt-in.
+
+On Qwen3-4B / RTX 4090 D (24 GiB), 24 trajectories / 102 turns / 9,871 fixed
+output tokens and synthetic 1 s tool waits, the latest three-repeat comparison is:
+
+| Arm | Managed CPU / pinned KV | End-to-end median | D2H |
+|---|---|---:|---:|
+| vLLM 0.29.0 APC | 0 / 0 | 155.803 s | 0 GiB |
+| vLLM APC + native CPU offload | 4 / 4 GiB | 157.358 s | 113.199 GiB |
+| Runtime synchronous snapshot | 4 / 4 GiB | 158.217 s | 86.605 GiB |
+| Runtime synchronous block | 4 / 4 GiB | **154.103 s** | **64.553 GiB** |
+
+With the same 5,922-block GPU KV pool, block reduced elapsed time by **2.07%**,
+D2H by **42.97%**, and prefill work by **7.16%** relative to the vLLM offload arm.
+Relative to our snapshot arm, elapsed time fell **2.60%** and D2H fell **25.46%**.
+These are small-sample descriptive results; session retention and replay adapters
+differ, and managed KV limits do not imply equal process memory. This does not
+establish a stable ranking or RL numerical equivalence. A separate 8/4 GiB
+snapshot experiment found **no end-to-end benefit from early async D2H**.
+
+[Design, configuration, all timing samples and limitations](KV_CACHE.md) ·
+[Per-run metrics](bench/results/kv-tiered/comparison.json) ·
+[Recompute summaries](scripts/summarize_kv_comparison.py).
+
+### Historical September 12 CPU KV offload: measured gains and limits
 
 ![CPU offload across three capacity and concurrency conditions](docs/assets/performance/offload-boundary.png)
 
@@ -100,7 +129,7 @@ The work also improved the surrounding system:
 
 | Check | Recorded evidence | What it establishes |
 |---|---|---|
-| Public CPU suite | **365 passed / 24 skipped**; [test summary](TEST_RESULTS.md) | Published-source behavior; optional-resource tests remain skipped |
+| Public CPU suite | **488 passed / 25 skipped**; [test summary](TEST_RESULTS.md) | Published-source behavior; optional-resource tests remain skipped |
 | Archived CUDA tests | **6 passed**; [verification records](bench/results/session-cpu-offload/verification.json) | Real GPU save/restore and offload paths |
 | Unforced model checks | **16 cases**, 128–16,384-token prefixes; [per-case checks](bench/results/session-cpu-offload/verification.json) | Bit-exact KV and identical continuation/logprobs against held GPU KV |
 | Replay audit | **58 executions**, including repeated arms and first-use passes; [audit](bench/results/session-cpu-offload/verification.json) | Source/trace linkage, byte conservation and final cleanup; not 58 independent workloads |
@@ -356,7 +385,7 @@ corpora and model weights are not distributed.
 
 ## Verification and limits
 
-The latest [test record](TEST_RESULTS.md) reports **365 passed, 24 skipped** on
+The latest [test record](TEST_RESULTS.md) reports **488 passed, 25 skipped** on
 CPU and a successful wheel/source build. Coverage includes session isolation,
 CPU KV save/restore and admission, explicit completion, weight invalidation,
 token/logprob alignment, sampling, and speculative commit/rollback.
